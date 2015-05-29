@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+
+Bundler.require(:default) if defined?(Bundler)
+require 'bricolage/jobnetrunner'
+
+Bricolage::JobNetRunner.main

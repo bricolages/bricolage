@@ -1,0 +1,8 @@
+require 'bricolage/context'
+require 'bricolage/filesystem'
+require 'bricolage/job'
+require 'bricolage/rubyjobclass'
+require 'bricolage/datasource'
+require 'bricolage/eventhandlers'
+require 'bricolage/logger'
+require 'bricolage/exception'

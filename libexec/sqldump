@@ -1,0 +1,9 @@
+#!/bin/sh
+
+binary="$0.$(uname -s)"
+if ! [[ -x $binary ]]
+then
+    echo "$0: error: sqldump does not support $(uname -s)" 1>&2
+    exit 1
+fi
+exec "$binary" "$@"
