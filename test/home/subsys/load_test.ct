@@ -1,0 +1,6 @@
+create table load_test
+( x integer
+, y varchar(20)
+, z varchar(20)
+)
+;

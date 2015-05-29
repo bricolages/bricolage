@@ -1,0 +1,9 @@
+create table $dest_table
+( job_process_id varchar(256)
+, start_time timestamp
+, end_time timestamp
+, target_table varchar(256)
+, data_file varchar(2048)
+)
+sortkey (job_process_id)
+;
