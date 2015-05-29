@@ -1,7 +1,7 @@
 Bricolage
 =========
 
-SQL batch framework for (mainly) Redshift.
+SQL batch framework for Redshift.
 
 This software is written in working time in Cookpad, Inc.
 
@@ -9,10 +9,11 @@ This software is written in working time in Cookpad, Inc.
 License
 -------
 
-MIT license.  See LICENSES file for details.
+MIT license.
+See LICENSES file for details.
 
 
 Author
 ------
 
-Minero Aoki <aamine@loveruby.net>
+Minero Aoki
