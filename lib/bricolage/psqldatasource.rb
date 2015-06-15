@@ -3,6 +3,7 @@ require 'bricolage/s3datasource'
 require 'bricolage/sqlstatement'
 require 'bricolage/commandutils'
 require 'bricolage/postgresconnection'
+require 'bricolage/vacuumlock'
 require 'bricolage/exception'
 require 'pathname'
 
@@ -116,12 +117,18 @@ module Bricolage
       open {|conn| conn.select(table, &block) }
     end
 
+    include VacuumLock
+
     def vacuum(table)
-      open {|conn| conn.vacuum(table) }
+      serialize_vacuum {
+        open {|conn| conn.vacuum(table) }
+      }
     end
 
     def vacuum_sort_only(table)
-      open {|conn| conn.vacuum_sort_only(table) }
+      serialize_vacuum {
+        open {|conn| conn.vacuum_sort_only(table) }
+      }
     end
 
     def analyze(table)
@@ -254,19 +261,12 @@ module Bricolage
       end
     end
 
-    DEFAULT_VACUUM_LOCK_FILE = '/tmp/bricolage.vacuum.lock'
-    DEFAULT_VACUUM_LOCK_TIMEOUT = 3600   # 60min
+    include VacuumLock
 
-    def serialize_vacuum
-      if ENV['BRICOLAGE_VACUUM_LOCK']
-        path, tm = ENV['BRICOLAGE_VACUUM_LOCK'].split(':', 2)
-        timeout = tm.to_i
-      else
-        path = DEFAULT_VACUUM_LOCK_FILE
-        timeout = DEFAULT_VACUUM_LOCK_TIMEOUT
-      end
-      lock_file_cmd = Pathname(__FILE__).parent.parent.parent + 'libexec/create-lockfile'
-      exec SQLStatement.for_string "\\! #{lock_file_cmd} #{path} #{timeout}"
+    def serialize_vacuum   # override
+      path, timeout = vacuum_lock_parameters
+      return yield unless path
+      exec SQLStatement.for_string "\\! #{create_lockfile_cmd} #{path} #{timeout}"
       yield
       exec SQLStatement.for_string "\\! rm #{path}"
     end
@@ -466,6 +466,5 @@ module Bricolage
       end
     end
   end
-
 
 end
