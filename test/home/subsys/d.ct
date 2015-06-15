@@ -1,0 +1,7 @@
+--dest-table: d
+
+create table $dest_table
+( x int
+, y int
+, z int
+);
