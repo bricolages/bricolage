@@ -10,7 +10,7 @@ module Bricolage
       sargs.unshift env if env
       system(*sargs)
       st = $?
-      logger.info "status: #{st.exitstatus} (#{st})"
+      logger.info "status: #{st.exitstatus || 'nil'} (#{st})"
       st
     end
 

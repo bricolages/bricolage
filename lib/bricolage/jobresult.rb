@@ -47,7 +47,8 @@ module Bricolage
 
     def status
       if @process_status
-        @process_status.exitstatus
+        # Process::Status#exitstatus may be nil when the command did not exited normally
+        @process_status.exitstatus || EXIT_FAILURE
       else
         case @type
         when :success then EXIT_SUCCESS
