@@ -26,6 +26,10 @@ module Bricolage
   end
 
   ##
+  # Aquiring lock takes too long (e.g. VACUUM lock)
+  class LockTimeout < JobFailure; end
+
+  ##
   # Job error.
   # This exception should NOT be thrown in production environment.
   # Developer must fix source code or configuration, not to be get this exception.

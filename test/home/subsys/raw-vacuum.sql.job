@@ -1,0 +1,7 @@
+/*
+    class: sql
+*/
+
+<%= psql_serialize_vacuum_begin %>
+vacuum s;
+<%= psql_serialize_vacuum_end %>

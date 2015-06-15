@@ -264,11 +264,9 @@ module Bricolage
     include VacuumLock
 
     def serialize_vacuum   # override
-      path, timeout = vacuum_lock_parameters
-      return yield unless path
-      exec SQLStatement.for_string "\\! #{create_lockfile_cmd} #{path} #{timeout}"
+      exec SQLStatement.for_string psql_serialize_vacuum_begin
       yield
-      exec SQLStatement.for_string "\\! rm #{path}"
+      exec SQLStatement.for_string psql_serialize_vacuum_end
     end
 
     def analyze_if(enabled, target = '${dest_table}')
