@@ -1,0 +1,13 @@
+/*
+    class: rebuild-drop
+    table-def: d.ct
+    dest-table: d
+    src-tables:
+        s: s
+    analyze: true
+    vacuum-sort: true
+*/
+
+insert into $dest_table
+select * from $s
+;

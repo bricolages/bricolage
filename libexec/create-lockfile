@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+
+DEFAULT_TIMEOUT = 900    # 15 minutes
+MINIMUM_TIMEOUT = 1
+
+def main
+  unless ARGV.size == 2
+    $stderr.puts "Usage: #{$0} PATH TIMEOUT_SEC"
+    exit 1
+  end
+  path, tm = ARGV
+  timeout = [tm.to_i, MINIMUM_TIMEOUT].max
+  create_lock_file path, timeout
+end
+
+def create_lock_file(path, timeout)
+  start_time = Time.now
+  print_message "trying to create lock file: #{path} (psql #{parent_is_psql? ? 'detected' : 'NOT detected'})"
+  begin
+    File.open(path, File::WRONLY | File::CREAT | File::EXCL) {|f|
+      f.puts "#{Time.now}: created by process \##{Process.ppid}"
+    }
+  rescue Errno::EEXIST
+    if Time.now - start_time > timeout
+      emit_error_to_psql
+      error_exit "could not create lock file: #{path} (timeout #{timeout} seconds)"
+    end
+    sleep 3
+    retry
+  rescue
+    emit_error_to_psql
+    raise
+  end
+  print_message "lock file created: #{path}"
+end
+
+def emit_error_to_psql
+  # psql does not stop on error of external command,
+  # we must explicitly stop that.
+  if parent_is_psql?
+    Process.kill 'TERM', Process.ppid
+  end
+end
+
+def parent_is_psql?
+  # psql set this environment variable
+  !!ENV['PGSYSCONFDIR']
+end
+
+def error_exit(msg)
+  $stderr.puts "#{$0}: error: #{msg}"
+  exit 1
+end
+
+def print_message(msg)
+  $stderr.puts "#{Time.now}: #{msg}"
+end
+
+main
