@@ -59,6 +59,10 @@ module Bricolage
 
     private
 
+    #
+    # For embedded code
+    #
+
     include EmbeddedCodeAPI
 
     def app_home
@@ -76,6 +80,12 @@ module Bricolage
       ensure
         @base_dir = saved
       end
+    end
+
+    # $base_dir + "vars.yml" -> "$base_dir/vars.yml"
+    # $base_dir + "/abs/path/vars.yml" -> "/abs/path/vars.yml"
+    def read_config_file(path)
+      load_eruby(relative_path(Pathname(path)))
     end
   end
 
