@@ -10,31 +10,17 @@ require 'date'
 module Bricolage
 
   class ConfigLoader
-    def ConfigLoader.load_eruby_yaml(path)
-      new(nil).load_eruby_yaml(path)
-    end
-
     def initialize(app_home)
       @app_home = app_home
       @base_dir = Pathname('.')
     end
 
-    def load_eruby(path)
-      eruby(read_file(path), path)
-    end
-
-    def load_eruby_yaml(path)
-      parse_yaml(load_eruby(path), path)
-    end
-
     def load_yaml(path)
-      parse_yaml(read_file(path), path)
+      parse_yaml(load_text(path), path)
     end
 
-    def parse_yaml(text, path)
-      YAML.load(text)
-    rescue => err
-      raise ParameterError, "#{path}: config file syntax error: #{err.message}"
+    def load_text(path)
+      eruby(read_file(path), path)
     end
 
     def eruby(text, path)
@@ -45,10 +31,12 @@ module Bricolage
       }
     end
 
-    def eval_file(path)
-      push_base_dir(path) {
-        instance_eval(File.read(path), path.to_s, 1)
-      }
+    private
+
+    def parse_yaml(text, path)
+      YAML.load(text)
+    rescue => err
+      raise ParameterError, "#{path}: config file syntax error: #{err.message}"
     end
 
     def read_file(path)
@@ -57,7 +45,9 @@ module Bricolage
       raise ParameterError, "could not read file: #{err.message}"
     end
 
-    private
+    #
+    # For embedded code
+    #
 
     include EmbeddedCodeAPI
 
@@ -76,6 +66,12 @@ module Bricolage
       ensure
         @base_dir = saved
       end
+    end
+
+    # $base_dir + "vars.yml" -> "$base_dir/vars.yml"
+    # $base_dir + "/abs/path/vars.yml" -> "/abs/path/vars.yml"
+    def read_config_file(path)
+      load_text(relative_path(Pathname(path)))
     end
   end
 
