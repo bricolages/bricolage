@@ -8,7 +8,7 @@ module Bricolage
       values = if /\.sql\.job\z/ =~ path.to_s
         load_embedded_definition(ctx, path)
       else
-        ctx.parameter_file_loader.load_eruby_yaml(path)
+        ctx.parameter_file_loader.load_yaml(path)
       end
       parse(values, path)
     end
@@ -17,7 +17,7 @@ module Bricolage
       private
 
       def load_embedded_definition(ctx, path)
-        sql = ctx.parameter_file_loader.read_file(path)
+        sql = ctx.parameter_file_loader.load_text(path)
         block = sql.slice(%r{\A/\*.*?^\*/}m) or
             raise ParameterError, "missing embedded job definition block: #{path}"
         yaml = block.sub(%r{\A/\*}, '').sub(%r{^\*/\s*\z}, '')

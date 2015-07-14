@@ -35,7 +35,7 @@ module Bricolage
         database_yml = @context.config_pathes(basename).detect {|path| path.exist? }
         raise ParameterError, "database.yml does not exist" unless database_yml
         @config_dir = database_yml.parent
-        DataSourceFactory.new(load_eruby_yaml(database_yml), @context, @logger)
+        DataSourceFactory.new(load_yaml(database_yml), @context, @logger)
       end
 
       def password(name)

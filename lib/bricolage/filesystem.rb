@@ -126,6 +126,10 @@ module Bricolage
       [ "config/#{name}", "config/#{@environment}/#{name}" ].map {|rel| root.relative(rel) }
     end
 
+    def config_file_loader
+      ConfigLoader.new(home_path)
+    end
+
     def job_file(id)
       path = typed_name(id, 'job')
       return path if path.exist?

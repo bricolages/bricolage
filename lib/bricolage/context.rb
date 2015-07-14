@@ -97,7 +97,7 @@ module Bricolage
 
     def load_variables(path)
       Variables.define {|vars|
-        parameter_file_loader.load_eruby_yaml(path).each do |name, value|
+        @filesystem.config_file_loader.load_yaml(path).each do |name, value|
           vars[name] = value
         end
       }
