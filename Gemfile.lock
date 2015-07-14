@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    bricolage (5.9.0)
+    bricolage (5.9.3)
       aws-sdk (< 2)
       mysql2
       pg
@@ -21,7 +21,7 @@ GEM
       yajl-ruby (~> 1.0)
     hirb (0.7.3)
     httpclient (2.5.3.3)
-    json (1.8.2)
+    json (1.8.3)
     method_source (0.8.2)
     mini_portile (0.6.2)
     msgpack (0.5.12)
@@ -64,3 +64,6 @@ DEPENDENCIES
   bricolage!
   pry
   test-unit
+
+BUNDLED WITH
+   1.10.2
