@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    bricolage (5.9.4)
+    bricolage (5.10.0)
       aws-sdk (< 2)
       mysql2
       pg
@@ -64,6 +64,3 @@ DEPENDENCIES
   bricolage!
   pry
   test-unit
-
-BUNDLED WITH
-   1.10.2

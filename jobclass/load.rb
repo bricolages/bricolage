@@ -6,7 +6,7 @@ JobClass.define('load') {
     params.add SrcFileParam.new
     params.add DataSourceParam.new('sql', 'dest-ds', 'Target data source.')
     params.add DestTableParam.new(optional: false)
-    params.add EnumParam.new('format', %w(tsv json), 'Data file format.', default: 'tsv')
+    params.add EnumParam.new('format', %w(tsv csv json), 'Data file format.', default: 'tsv')
     params.add StringParam.new('jsonpath', 'PATH', 'jsonpath to specify columns of json format records', optional: true)
     params.add KeyValuePairsParam.new('options', 'OPTIONS', 'Loader options.',
         optional: true, default: PSQLLoadOptions.new,

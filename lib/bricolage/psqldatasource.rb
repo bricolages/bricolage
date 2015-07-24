@@ -323,6 +323,8 @@ module Bricolage
       case fmt
       when 'tsv'
         %q(delimiter '\t')
+      when 'csv'
+        %q(delimiter ',')
       when 'json'
         jsonpath ? "json \'#{src_ds.url(jsonpath)}\'" : %q(json 'auto')
       else
@@ -352,6 +354,8 @@ module Bricolage
       case format
       when 'tsv'
         %q(delimiter '\t')
+      when 'csv'
+        %q(delimiter ',')
       else
         raise ParameterError, "unsupported format: #{fmt}"
       end
