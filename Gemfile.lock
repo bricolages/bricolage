@@ -64,6 +64,3 @@ DEPENDENCIES
   bricolage!
   pry
   test-unit
-
-BUNDLED WITH
-   1.10.2
