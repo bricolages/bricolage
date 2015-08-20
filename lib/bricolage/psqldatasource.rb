@@ -56,7 +56,7 @@ module Bricolage
       yield
     end
 
-    def execute(source)
+    def execute(source, options = [])
       make_tmpfile(source, tmpdir: @tmpdir) {|path|
         st = command @psql, "--no-psqlrc", "--host=#{@host}", "--port=#{@port}",
             "--username=#{@user}", @database,
@@ -64,6 +64,7 @@ module Bricolage
             '-v', 'ON_ERROR_STOP=true',
             '-f', path,
             '--no-password',
+            *options,
             env: get_psql_env
         msg = retrieve_last_match_from_stderr(/^psql:.*?:\d+: ERROR: (.*)/, 1) unless st.success?
         JobResult.for_process_status(st, msg)
