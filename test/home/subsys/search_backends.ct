@@ -1,0 +1,13 @@
+--dest-table: search_backends
+
+create table $dest_table
+( id int
+, role varchar(10)
+, group_id smallint
+, index_type varchar(32)
+, config_key varchar(32)
+, updated_at timestamp
+)
+distkey (id)
+sortkey (id)
+;
