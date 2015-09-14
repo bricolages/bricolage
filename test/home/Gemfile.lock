@@ -1,7 +1,7 @@
 PATH
   remote: ../..
   specs:
-    bricolage (5.9.2)
+    bricolage (5.9.6)
       aws-sdk (< 2)
       mysql2
       pg
@@ -10,9 +10,9 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    aws-sdk (1.64.0)
-      aws-sdk-v1 (= 1.64.0)
-    aws-sdk-v1 (1.64.0)
+    aws-sdk (1.66.0)
+      aws-sdk-v1 (= 1.66.0)
+    aws-sdk-v1 (1.66.0)
       json (~> 1.4)
       nokogiri (>= 1.4.4)
     fluent-logger (0.4.10)
@@ -20,25 +20,26 @@ GEM
       yajl-ruby (~> 1.0)
     hirb (0.7.3)
     httpclient (2.5.3.3)
-    json (1.8.2)
+    json (1.8.3)
     mini_portile (0.6.2)
-    msgpack (0.5.12)
-    mysql2 (0.3.18)
+    msgpack (0.5.11)
+    mysql2 (0.4.0)
     nokogiri (1.6.6.2)
       mini_portile (~> 0.6.0)
     parallel (0.6.5)
-    pg (0.18.2)
-    rubyzip (0.9.9)
-    td (0.11.10)
+    pg (0.18.3)
+    rubyzip (1.1.7)
+    td (0.12.0)
       hirb (>= 0.4.5)
-      msgpack (>= 0.4.4, < 0.6.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
+      msgpack (>= 0.4.4, < 0.5.12, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
       parallel (~> 0.6.1)
-      rubyzip (~> 0.9.9)
-      td-client (~> 0.8.70)
+      rubyzip (~> 1.1.7)
+      td-client (~> 0.8.75)
       td-logger (~> 0.3.21)
       yajl-ruby (~> 1.1)
-    td-client (0.8.70)
-      httpclient (>= 2.4.0, < 2.6.0)
+      zip-zip (~> 0.3)
+    td-client (0.8.75)
+      httpclient (>= 2.5.2, < 2.6.0)
       json (>= 1.7.6)
       msgpack (>= 0.4.4, < 0.6.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
     td-logger (0.3.24)
@@ -46,6 +47,8 @@ GEM
       msgpack (>= 0.4.4, < 0.6.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
       td-client (~> 0.8.66)
     yajl-ruby (1.2.1)
+    zip-zip (0.3)
+      rubyzip (>= 1.0.0)
 
 PLATFORMS
   ruby
@@ -54,4 +57,4 @@ DEPENDENCIES
   bricolage!
 
 BUNDLED WITH
-   1.10.2
+   1.10.6

@@ -1,0 +1,32 @@
+class: my-migrate
+src-ds: mysql
+src-tables:
+    search_backends: main.search_backends
+tmp-file: $data_dir/search_backends.json.gz
+
+s3-ds: s3
+s3-file: /search_backends/search_backends.json.gz
+override: true
+remove-tmp: true
+
+dest-ds: sql
+dest-table: $test_schema.search_backends
+table-def: search_backends.ct
+options:
+    statupdate: false
+    compupdate: false
+    #maxerror: 10
+    ## string
+    #acceptinvchars: " "
+    emptyasnull: true
+    #trimblanks: true
+    #truncatecolumns: true
+    ## datetime
+    #acceptanydate: true
+    #dateformat: "auto"
+    #timeformat: "auto"
+vacuum-sort: true
+analyze: true
+grant:
+    privilege: select
+    to: "$test_group"

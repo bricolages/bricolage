@@ -12,6 +12,7 @@ JobClass.define('my-migrate') {
     params.add DestFileParam.new('s3-file', 'PATH', 'Temporary S3 file path.')
     params.add DataSourceParam.new('s3', 's3-ds', 'Temporary file storage.')
     params.add OptionalBoolParam.new('override', 'If true, overwrite s3 target file.  Otherwise causes error.')
+    params.add OptionalBoolParam.new('remove-tmp', 'Removes temporary local files after S3-PUT is succeeded.')
 
     # Load
     params.add DestTableParam.new(optional: false)
@@ -60,6 +61,11 @@ JobClass.define('my-migrate') {
       script.task(params['s3-ds']) {|task|
         task.put params['tmp-file'], params['s3-file'], check_args: false
       }
+      if params['remove-tmp']
+        script.task(params.file_ds) {|task|
+          task.remove params['tmp-file']
+        }
+      end
     end
 
     # Load
