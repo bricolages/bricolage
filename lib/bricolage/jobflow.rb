@@ -137,14 +137,14 @@ module Bricolage
 
   class RootJobFlow < JobFlow
     def RootJobFlow.load(ctx, path)
-      flow = new(ctx)
+      flow = new(FileLoader.new(ctx))
       flow.add_subnet JobFlow.load(path)
       flow.fix
       flow
     end
 
-    def initialize(ctx)
-      @ctx = ctx
+    def initialize(jobnet_loader)
+      @jobnet_loader = jobnet_loader
       super ROOT_FLOW_NAME, Location.dummy
       @subnets = {}
     end
@@ -155,19 +155,23 @@ module Bricolage
     end
 
     def subnet(ref)
-      if flow = @subnets[ref]
-        flow
-      else
-        flow = load_jobnet_auto(ref)
+      unless flow = @subnets[ref]
+        flow = @jobnet_loader.load(ref)
         add_subnet flow
-        flow
       end
+      flow
     end
 
-    def load_jobnet_auto(ref)
-      path = @ctx.root_relative_path(ref.relative_path)
-      raise ParameterError, "undefined subnet: #{ref}" unless path.file?
-      JobFlow.load(path)
+    class FileLoader
+      def initialize(ctx)
+        @context = ctx
+      end
+
+      def load(ref)
+        path = @context.root_relative_path(ref.relative_path)
+        raise ParameterError, "undefined subnet: #{ref}" unless path.file?
+        JobFlow.load(path)
+      end
     end
 
     def each_subnet(&block)
