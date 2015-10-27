@@ -20,6 +20,7 @@ class StreamingLoadJobClass < RubyJobClass
     params.add Bricolage::StringParam.new('queue-path', 'S3_PATH', 'S3 path for data file queue.')
     params.add Bricolage::StringParam.new('persistent-path', 'S3_PATH', 'S3 path for persistent data file store.')
     params.add Bricolage::StringParam.new('file-name', 'PATTERN', 'name pattern of target data file.')
+    params.add Bricolage::SQLFileParam.new('sql-file', 'PATH', 'SQL to insert rows from the work table to the target table.', optional: true)
     params.add Bricolage::OptionalBoolParam.new('noop', 'Does not change any data.')
     params.add Bricolage::OptionalBoolParam.new('load-only', 'Just issues COPY statement to work table and quit. No INSERT, no dequeue, no load log.')
     params.add Bricolage::OptionalBoolParam.new('dequeue-only', 'Dequeues already loaded files.')
@@ -46,6 +47,10 @@ class StreamingLoadJobClass < RubyJobClass
     nil
   end
 
+  def bind(ctx, vars)
+    @loader.sql.bind(ctx, vars) if @loader.sql
+  end
+
   def make_loader(params)
     ds = params['redshift-ds']
     RedshiftStreamingLoader.new(
@@ -55,6 +60,7 @@ class StreamingLoadJobClass < RubyJobClass
       work_table: string(params['work-table']),
       log_table: string(params['log-table']),
       load_options: params['load-options'],
+      sql: params['sql-file'],
       logger: ds.logger,
       noop: params['noop'],
       load_only: params['load-only']
@@ -79,6 +85,7 @@ class StreamingLoadJobClass < RubyJobClass
   class RedshiftStreamingLoader
     def initialize(data_source:, queue:,
         table:, work_table: nil, log_table: nil, load_options: nil,
+        sql: nil,
         logger:, noop: false, load_only: false)
       @ds = data_source
       @src = queue
@@ -86,6 +93,7 @@ class StreamingLoadJobClass < RubyJobClass
       @work_table = work_table
       @log_table = log_table
       @load_options = load_options
+      @sql = sql
       @logger = logger
       @noop = noop
       @load_only = load_only
@@ -94,6 +102,8 @@ class StreamingLoadJobClass < RubyJobClass
       @end_time = nil
       @job_process_id = "#{@start_time.strftime('%Y%m%d-%H%M%S')}.#{Socket.gethostname}.#{Process.pid}"
     end
+
+    attr_reader :sql
 
     def load
       load_in_parallel
@@ -170,7 +180,8 @@ class StreamingLoadJobClass < RubyJobClass
 
     def commit_work_table(conn)
       return unless @work_table
-      execute_update conn, "insert into #{@table} select * from #{@work_table};"
+      insert_stmt = @sql ? @sql.source : "insert into #{@table} select * from #{@work_table};"
+      execute_update conn, insert_stmt
       # keep work table records for tracing
     end
 
