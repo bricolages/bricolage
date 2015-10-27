@@ -222,6 +222,11 @@ module Bricolage
       @context.get_data_source('file', 'file')
     end
 
+    # FIXME: remove
+    def ruby_ds
+      @context.get_data_source('ruby', 'ruby')
+    end
+
   end   # class Parameters
 
   class Param

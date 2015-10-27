@@ -49,7 +49,7 @@ module Bricolage
       @logger = logger
     end
 
-    BUILTIN_TYPES = %w(generic file)
+    BUILTIN_TYPES = %w(generic file ruby)
 
     # For job classes
     def get(kind, name)
