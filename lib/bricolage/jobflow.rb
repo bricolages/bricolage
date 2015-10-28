@@ -3,6 +3,113 @@ require 'tsort'
 
 module Bricolage
 
+  class RootJobFlow
+    def RootJobFlow.load(ctx, path)
+      flow = new(JobFlow::FileLoader.new(ctx), JobFlow.load(path))
+      flow.fix
+      flow
+    end
+
+    def initialize(jobnet_loader, start_flow)
+      @jobnet_loader = jobnet_loader
+      @start_flow = start_flow
+      @flows = {start_flow.ref => start_flow}
+      @deps = nil
+    end
+
+    def add_subnet(flow)
+      raise ParameterError, "duplicated subnet definition: #{flow.name}" if @flows.key?(flow.name)
+      @flows[flow.ref] = flow
+    end
+
+    def subnet(ref)
+      unless flow = @flows[ref]
+        flow = @jobnet_loader.load(ref)
+        add_subnet flow
+      end
+      flow
+    end
+
+    def each_flow(&block)
+      # Duplicates list to avoid modification in each
+      @flows.values.each(&block)
+    end
+
+    def fix
+      load_all_flows
+      build_whole_flow
+    end
+
+    def sequential_jobs
+      tsort.reject {|ref| ref.dummy? }
+    end
+
+    include TSort
+
+    def tsort_each_node(&block)
+      @deps.each_key(&block)
+    end
+
+    def tsort_each_child(ref, &block)
+      @deps.fetch(ref).each(&block)
+    end
+
+    private
+
+    def load_all_flows
+      # RootJobNet#subnet loads jobflow lazily, we need to process jobnets recursively
+      unresolved = true
+      while unresolved
+        unresolved = false
+        each_flow do |flow|
+          unless flow.subnets_resolved?
+            flow.resolve_subnets self
+            unresolved = true
+          end
+        end
+      end
+    end
+
+    def build_whole_flow
+      each_flow do |flow|
+        flow.close
+      end
+      @deps = deps = build_deps
+      check_cycle(deps)
+      check_orphan(deps)
+    end
+
+    def build_deps
+      h = {}
+      each_flow do |flow|
+        flow.each_dependencies do |ref, deps|
+          h[ref] = ((h[ref] || []) + deps).uniq
+        end
+      end
+      h[@start_flow.start] ||= []
+      h
+    end
+
+    def check_cycle(deps)
+      each_strongly_connected_component do |refs|
+        unless refs.size == 1
+          cycle = (refs + [refs.first]).reverse.join(' -> ')
+          raise ParameterError, "found cycle in the flow: #{cycle}"
+        end
+      end
+    end
+
+    def check_orphan(deps)
+      orphan_nodes(deps).each do |ref|
+        raise ParameterError, "found orphan job in the flow: #{ref.location}: #{ref}"
+      end
+    end
+
+    def orphan_nodes(deps)
+      deps.to_a.select {|ref, deps| deps.empty? and not ref.dummy? and not ref.net? }.map {|ref, *| ref }
+    end
+  end
+
   class JobFlow
     def JobFlow.load(path)
       File.open(path) {|f|
@@ -19,7 +126,7 @@ module Bricolage
     end
 
     def JobFlow.parse_stream(f, ref)
-      Parser.new(ref.subsystem).parse_stream(f, ref)
+      Parser.new(ref).parse_stream(f, ref)
     end
 
     def JobFlow.root
@@ -31,6 +138,8 @@ module Bricolage
     def initialize(ref, location)
       @ref = ref
       @location = location
+      @start = ref.start_ref
+      @end = ref.end_ref
       @flow = {}   # Ref => [Ref] (src->dest)
       @deps = {}   # Ref => [Ref] (dest->src)
       @subnets_resolved = false
@@ -41,13 +150,15 @@ module Bricolage
     end
 
     attr_reader :ref
+    attr_reader :start
+    attr_reader :end
 
     def name
       ref.to_s
     end
 
     def add_edge(src, dest)
-      (@flow[src] ||= []).push dest unless dest.net?
+      (@flow[src] ||= []).push dest
       (@deps[dest] ||= []).push src
     end
 
@@ -57,42 +168,6 @@ module Bricolage
         h[src.to_s] = dests.map {|d| d.to_s }
       end
       h
-    end
-
-    def dependencies
-      h = {}
-      @deps.each do |ref, deps|
-        h[ref.to_s] = deps.map(&:to_s)
-      end
-      h
-    end
-
-    def dependent_flows
-      @deps.values.flatten.select {|ref| ref.net? }.uniq
-    end
-
-    def sequential_nodes
-      tsort.reject {|ref| ref.dummy? }
-    end
-
-    def sequential_jobs
-      sequential_nodes.reject {|ref| ref.net? }
-    end
-
-    include TSort
-
-    def tsort_each_node(&block)
-      @deps.each_key(&block)
-    end
-
-    def tsort_each_child(ref, &block)
-      @deps.fetch(ref).each(&block)
-    end
-
-    def fix_graph
-      close_graph
-      check_cycle
-      check_orphan
     end
 
     def resolve_subnets(root_flow)
@@ -107,60 +182,28 @@ module Bricolage
       @subnets_resolved
     end
 
-    private
-
-    def close_graph
-      @deps.values.flatten.uniq.each do |ref|
-        @deps[ref] ||= []
-      end
-    end
-
-    def check_cycle
-      each_strongly_connected_component do |refs|
-        unless refs.size == 1
-          cycle = (refs + [refs.first]).reverse.join(' -> ')
-          raise ParameterError, "found cycle in the flow: #{cycle}"
+    def close
+      (@flow.keys + @flow.values.flatten).uniq.each do |ref|
+        next if ref.dummy?
+        unless @deps[ref]
+          @deps[ref] = [@start]
+        end
+        unless @flow[ref]
+          (@deps[@end] ||= []).push ref
         end
       end
     end
 
-    def check_orphan
-      orphan_nodes.each do |ref|
-        raise ParameterError, "found orphan job in the flow: #{ref.location}: #{ref}"
+    def each_dependencies
+      @deps.each do |ref, deps|
+        dest = (ref.net? ? ref.start : ref)
+        srcs = deps.map {|r| r.net? ? r.end : r }
+        yield dest, srcs
       end
-    end
-
-    def orphan_nodes
-      @deps.to_a.select {|ref, deps| deps.empty? and not ref.dummy? and not ref.net? }.map {|ref, *| ref }
     end
   end
 
-  class RootJobFlow < JobFlow
-    def RootJobFlow.load(ctx, path)
-      flow = new(FileLoader.new(ctx))
-      flow.add_subnet JobFlow.load(path)
-      flow.fix
-      flow
-    end
-
-    def initialize(jobnet_loader)
-      @jobnet_loader = jobnet_loader
-      super ROOT_FLOW_NAME, Location.dummy
-      @subnets = {}
-    end
-
-    def add_subnet(flow)
-      raise ParameterError, "duplicated subnet definition: #{flow.name}" if @subnets.key?(flow.name)
-      @subnets[flow.name] = flow
-    end
-
-    def subnet(ref)
-      unless flow = @subnets[ref]
-        flow = @jobnet_loader.load(ref)
-        add_subnet flow
-      end
-      flow
-    end
+  class JobFlow   # reopen as namespace
 
     class FileLoader
       def initialize(ctx)
@@ -174,70 +217,7 @@ module Bricolage
       end
     end
 
-    def each_subnet(&block)
-      @subnets.values.each(&block)
-    end
-
-    def each_flow(&block)
-      yield self
-      @subnets.each_value(&block)
-    end
-
-    def each_subnet_sequence
-      sequential_nodes.each do |ref|
-        yield subnet(ref)
-      end
-    end
-
-    def fix
-      resolve_subnet_references
-      each_subnet do |flow|
-        flow.fix_graph
-      end
-      add_jobnet_dependency_edges
-      fix_graph
-    end
-
-    private
-
-    def resolve_subnet_references
-      unresolved = true
-      while unresolved
-        unresolved = false
-        ([self] + @subnets.values).each do |flow|
-          unless flow.subnets_resolved?
-            flow.resolve_subnets self
-            unresolved = true
-          end
-        end
-      end
-    end
-
-    def add_jobnet_dependency_edges
-      each_subnet do |flow|
-        # dummy dependency to ensure to execute all subnets
-        add_edge Ref.dummy, flow.ref
-        # jobnet -> jobnet dependency
-        flow.dependent_flows.each do |dep_flow_ref|
-          add_edge dep_flow_ref, flow.ref
-        end
-      end
-    end
-
-    def check_orphan
-      # should not check orphan for root.
-    end
-  end
-
-  class JobFlow   # reopen as namespace
-
     class Ref
-      START_NAME = '@start'
-
-      def Ref.dummy
-        JobRef.new(nil, START_NAME, Location.dummy)
-      end
-
       def Ref.parse(ref, curr_subsys = nil, location = Location.dummy)
         return JobNetRef.new(nil, '', location) if ref == ROOT_FLOW_NAME
         m = %r<\A(\*)?(?:(\w[\w\-]*)/)?(@?\w[\w\-]*)\z>.match(ref) or
@@ -296,9 +276,7 @@ module Bricolage
         @flow = nil
       end
 
-      def flow=(flow)
-        @flow = flow
-      end
+      attr_accessor :flow
 
       def net?
         true
@@ -310,6 +288,23 @@ module Bricolage
 
       def relative_path
         "#{subsystem}/#{name}.jobnet"
+      end
+
+      def start_ref
+        JobRef.new(subsystem, "@#{name}@start", location)
+      end
+
+      def end_ref
+        JobRef.new(subsystem, "@#{name}@end", location)
+      end
+
+
+      def start
+        @flow.start
+      end
+
+      def end
+        @flow.end
       end
     end
 
@@ -340,8 +335,8 @@ module Bricolage
     end
 
     class Parser
-      def initialize(subsys)
-        @subsys = subsys
+      def initialize(jobnet_ref)
+        @jobnet_ref = jobnet_ref
       end
 
       def parse_stream(f, ref)
@@ -360,21 +355,22 @@ module Bricolage
       DEPEND_PATTERN = /\A(#{node_ref})?\s*->\s*(#{node_ref})\z/
 
       def foreach_edge(f)
-        default_src = Ref.dummy
+        default_src = nil
         f.each do |line|
           text = line.sub(/\#.*/, '').strip
           next if text.empty?
           loc = Location.for_file(f)
 
           if m = DEPEND_PATTERN.match(text)
-            src = m[1] ? ref(m[1], loc) : default_src
+            src = (m[1] ? ref(m[1], loc) : default_src) or
+                raise ParameterError, "syntax error at #{loc}: '->' must follow any job"
             dest = ref(m[2], loc)
             yield src, dest
             default_src = dest
 
           elsif m = START_PATTERN.match(text)
             dest = ref(m[1], loc)
-            yield Ref.dummy, dest
+            yield @jobnet_ref.start_ref, dest
             default_src = dest
 
           else
@@ -384,7 +380,7 @@ module Bricolage
       end
 
       def ref(ref_str, location)
-        Ref.parse(ref_str, @subsys, location)
+        Ref.parse(ref_str, @jobnet_ref.subsystem, location)
       end
     end
 

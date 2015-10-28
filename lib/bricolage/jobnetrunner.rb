@@ -80,24 +80,17 @@ module Bricolage
     end
 
     def enqueue_jobs(flow, queue)
-      flow.each_subnet_sequence do |subnet|
-        seq = 1
-        subnet.sequential_jobs.each do |ref|
-          queue.enq JobTask.new(subnet.ref, seq, ref)
-          seq += 1
-        end
+      seq = 1
+      flow.sequential_jobs.each do |ref|
+        queue.enq JobTask.new(ref)
+        seq += 1
       end
       queue.save
     end
 
     def list_jobs(queue)
-      prev = nil
       queue.each do |task|
-        if not prev or prev.jobnet != task.jobnet
-          puts "---- jobnet #{task.jobnet} ---"
-        end
         puts task.job
-        prev = task
       end
     end
 

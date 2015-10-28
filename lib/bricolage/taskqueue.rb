@@ -133,23 +133,19 @@ module Bricolage
   end
 
   class JobTask
-    def initialize(jobnet, seq, job)
-      @jobnet = jobnet
-      @seq = seq
+    def initialize(job)
       @job = job
     end
 
-    attr_reader :jobnet
-    attr_reader :seq
     attr_reader :job
 
     def serialize
-      [@jobnet, @seq, @job].join("\t")
+      [@job].join("\t")
     end
 
     def JobTask.deserialize(str)
-      jobnet, seq, job = str.strip.split("\t", 3)
-      new(JobFlow::Ref.parse(jobnet), seq.to_i, JobFlow::Ref.parse(job))
+      job, * = str.strip.split("\t")
+      new(JobFlow::Ref.parse(job))
     end
   end
 
