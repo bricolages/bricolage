@@ -40,7 +40,12 @@ module Bricolage
     }
   end
 
-  BeforeAllJobsEvent = Struct.new(:flow_id, :queue)
+  BeforeAllJobsEvent = Struct.new(:jobnet_id, :queue)
+  class BeforeAllJobsEvent   # reopen
+    def flow_id
+      jobnet_id
+    end
+ end
   BeforeJobEvent = Struct.new(:job)
   AfterJobEvent = Struct.new(:result)
   AfterAllJobsEvent = Struct.new(:succeeded, :queue)
