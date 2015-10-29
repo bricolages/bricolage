@@ -13,6 +13,12 @@ MIT license.
 See LICENSES file for details.
 
 
+Running Test
+------------
+
+% rake test
+
+
 Author
 ------
 
