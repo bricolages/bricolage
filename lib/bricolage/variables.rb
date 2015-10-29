@@ -38,6 +38,11 @@ module Bricolage
       var.value
     end
 
+    def get_force(name)
+      var = @vars[name]
+      var ? var.value : nil
+    end
+
     def []=(name, value)
       add Variable.new(name, value)
     end

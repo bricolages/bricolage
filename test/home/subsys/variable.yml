@@ -1,0 +1,4 @@
+defaults:
+    grant:
+        privilege: "select"
+        to: "$test_group"

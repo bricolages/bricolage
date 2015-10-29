@@ -6,6 +6,7 @@
         s: s
     analyze: true
     vacuum-sort: true
+    #grant: false
 */
 
 insert into $dest_table

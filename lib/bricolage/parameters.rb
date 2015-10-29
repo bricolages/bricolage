@@ -34,6 +34,11 @@ module Bricolage
         @decls.each_value(&block)
       end
 
+      def parse_default_values(values)
+        return IntermediateValues.empty(self) unless values
+        DefaultValuesHandler.new(self).parse(values)
+      end
+
       def parse_direct_values(values)
         DirectValueHandler.new(self).parse(values)
       end
@@ -46,6 +51,29 @@ module Bricolage
 
       def union_intermediate_values(*ival_list)
         IntermediateValues.union(self, *ival_list)
+      end
+    end
+
+    # Handles default values given by variable.yml (global or subsystem variables)
+    # Declarations + values -> IntermediateValues
+    class DefaultValuesHandler
+      def initialize(decls)
+        @decls = decls
+      end
+
+      def parse(values)
+        unless values.kind_of?(Hash)
+          raise ParameterError, "invalid type for 'defaults' global variable: #{values.class}"
+        end
+        parsed_values = {}
+        values.each do |name, value|
+          decl = @decls[name]
+          next unless decl   # ignore undeclared option
+          val = decl.parse_value(value)
+          # nil means really nil for default values.
+          parsed_values[name] = val
+        end
+        IntermediateValues.new(@decls, parsed_values, Variables.new)
       end
     end
 
@@ -626,6 +654,8 @@ module Bricolage
       when String   # FIXME: should be removed after changing all load options
         raise ParameterError, "bad type for parameter #{name}: #{h.class}" unless @value_handler
         h.strip.empty? ? nil : h
+      when nil, false   # disables option explicitly
+        {}
       else
         raise ParameterError, "bad type for parameter #{name}: #{h.class}"
       end
