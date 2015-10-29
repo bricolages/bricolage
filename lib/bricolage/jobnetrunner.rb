@@ -1,6 +1,6 @@
 require 'bricolage/application'
 require 'bricolage/context'
-require 'bricolage/jobflow'
+require 'bricolage/jobnet'
 require 'bricolage/taskqueue'
 require 'bricolage/job'
 require 'bricolage/jobresult'
@@ -23,8 +23,8 @@ module Bricolage
     def initialize
       Signal.trap('PIPE', 'IGNORE')
       @hooks = ::Bricolage
-      @flow_id = nil
-      @flow_start_time = Time.now
+      @jobnet_id = nil
+      @jobnet_start_time = Time.now
       @log_path = nil
     end
 
@@ -37,15 +37,15 @@ module Bricolage
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse ARGV
       @ctx = Context.for_application(nil, opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
-      @flow_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
+      @jobnet_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
       @log_path = opts.log_path
-      flow = RootJobFlow.load(@ctx, opts.jobnet_file)
+      jobnet = RootJobNet.load(@ctx, opts.jobnet_file)
       queue = get_queue(opts)
       if queue.locked?
         raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
       end
       unless queue.queued?
-        enqueue_jobs flow, queue
+        enqueue_jobs jobnet, queue
         logger.info "jobs are queued." if opts.queue_exist?
       end
       if opts.list_jobs?
@@ -79,9 +79,9 @@ module Bricolage
       end
     end
 
-    def enqueue_jobs(flow, queue)
+    def enqueue_jobs(jobnet, queue)
       seq = 1
-      flow.sequential_jobs.each do |ref|
+      jobnet.sequential_jobs.each do |ref|
         queue.enq JobTask.new(ref)
         seq += 1
       end
@@ -101,18 +101,18 @@ module Bricolage
     end
 
     def run_queue(queue)
-      @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@flow_id, queue))
+      @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
       queue.consume_each do |task|
         result = execute_job(task.job, queue)
         unless result.success?
-          logger.elapsed_time 'jobnet total: ', (Time.now - @flow_start_time)
+          logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
           logger.error "[job #{task.job}] #{result.message}"
           @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(false, queue))
           exit result.status
         end
       end
       @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(true, queue))
-      logger.elapsed_time 'jobnet total: ', (Time.now - @flow_start_time)
+      logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
       logger.info "status all green"
     end
 
@@ -135,11 +135,11 @@ module Bricolage
       start_time = Time.now
       @log_path.gsub(/%\{\w+\}/) {|var|
         case var
-        when '%{flow_start_date}' then @flow_start_time.strftime('%Y%m%d')
-        when '%{flow_start_time}' then @flow_start_time.strftime('%Y%m%d_%H%M%S%L')
+        when '%{jobnet_start_date}' then @jobnet_start_time.strftime('%Y%m%d')
+        when '%{jobnet_start_time}' then @jobnet_start_time.strftime('%Y%m%d_%H%M%S%L')
         when '%{job_start_date}' then start_time.strftime('%Y%m%d')
         when '%{job_start_time}' then start_time.strftime('%Y%m%d_%H%M%S%L')
-        when '%{flow}', '%{flow_id}' then @flow_id.gsub('/', '::')
+        when '%{jobnet}', '%{net}', '%{jobnet_id}', '%{net_id}', '%{flow}', '%{flow_id}' then @jobnet_id.gsub('/', '::')
         when '%{subsystem}' then job_ref.subsystem
         when '%{job}', '%{job_id}' then job_ref.name
         else

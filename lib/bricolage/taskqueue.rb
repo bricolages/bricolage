@@ -1,4 +1,4 @@
-require 'bricolage/jobflow'
+require 'bricolage/jobnet'
 require 'bricolage/exception'
 require 'pathname'
 
@@ -145,7 +145,7 @@ module Bricolage
 
     def JobTask.deserialize(str)
       job, * = str.strip.split("\t")
-      new(JobFlow::Ref.parse(job))
+      new(JobNet::Ref.parse(job))
     end
   end
 

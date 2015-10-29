@@ -4,40 +4,44 @@ require 'tsort'
 module Bricolage
 
   # Represents "first" jobnet given by command line (e.g. bricolage-jobnet some.jobnet)
-  class RootJobFlow
-    def RootJobFlow.load(ctx, path)
-      root = new(JobFlow::FileLoader.new(ctx), JobFlow.load(path))
+  class RootJobNet
+    def RootJobNet.load(ctx, path)
+      root = new(JobNet::FileLoader.new(ctx), JobNet.load(path))
       root.load_recursive
       root.fix
       root
     end
 
-    def initialize(jobnet_loader, start_flow)
+    def initialize(jobnet_loader, start_jobnet)
       @jobnet_loader = jobnet_loader
-      @start_flow = start_flow
-      @flows = {start_flow.ref => start_flow}
+      @start_jobnet = start_jobnet
+      @jobnets = {start_jobnet.ref => start_jobnet}
       @graph = nil
     end
 
-    attr_reader :start_flow
+    attr_reader :start_jobnet
 
-    def each_flow(&block)
-      @flows.each_value(&block)
+    def each_jobnet(&block)
+      @jobnets.each_value(&block)
+    end
+
+    def jobnets
+      @jobnets.values
     end
 
     def load_recursive
-      unresolved = [@start_flow]
+      unresolved = [@start_jobnet]
       until unresolved.empty?
         loaded = []
-        unresolved.each do |flow|
-          flow.net_refs.each do |ref|
-            next if ref.flow
-            unless flow = @flows[flow.ref]
-              flow = @jobnet_loader.load(ref)
-              @flows[flow.ref] = flow
-              loaded.push flow
+        unresolved.each do |net|
+          net.net_refs.each do |ref|
+            next if ref.jobnet
+            unless net = @jobnets[ref]
+              net = @jobnet_loader.load(ref)
+              @jobnets[ref] = net
+              loaded.push net
             end
-            ref.flow = flow
+            ref.jobnet = net
           end
         end
         unresolved = loaded
@@ -45,43 +49,50 @@ module Bricolage
     end
 
     def fix
-      each_flow do |flow|
-        flow.fix
+      each_jobnet do |net|
+        net.fix
       end
-      @flows.freeze
-      @graph = DependencyGraph.build(@flows.values)
+      @jobnets.freeze
+      @dag = JobDAG.build(jobnets)
     end
 
     def sequential_jobs
-      @graph.sequential_jobs
+      @dag.sequential_jobs
     end
   end
 
-  class DependencyGraph
-    def DependencyGraph.build(flows)
+  class JobDAG
+    def JobDAG.build(jobnets)
       graph = new
-      flows.each do |flow|
-        graph.merge! flow
+      jobnets.each do |net|
+        graph.merge! net
       end
       graph.fix
       graph
     end
 
     def initialize
-      @deps = {}
+      @deps = Hash.new { Array.new }   # {JobRef => [JobRef]} (dest->srcs)
     end
 
-    def merge!(flow)
-      flow.each_dependencies do |ref, deps|
-        @deps[ref] = ((@deps[ref] || []) + deps).uniq
+    def to_hash
+      h = {}
+      @deps.each do |dest, srcs|
+        h[dest.to_s] = srcs.map(&:to_s)
       end
-      @deps[flow.start] ||= []
+      h
+    end
+
+    def merge!(net)
+      net.each_dependencies do |ref, deps|
+        @deps[ref] |= deps
+      end
     end
 
     def fix
       @deps.freeze
-      check_cycle(deps)
-      check_orphan(deps)
+      check_cycle
+      check_orphan
     end
 
     def sequential_jobs
@@ -100,27 +111,35 @@ module Bricolage
 
     private
 
-    def check_cycle(deps)
+    def check_cycle
       each_strongly_connected_component do |refs|
         unless refs.size == 1
           cycle = (refs + [refs.first]).reverse.join(' -> ')
-          raise ParameterError, "found cycle in the flow: #{cycle}"
+          raise ParameterError, "found cycle in the jobnet: #{cycle}"
         end
       end
     end
 
-    def check_orphan(deps)
-      orphan_nodes(deps).each do |ref|
-        raise ParameterError, "found orphan job in the flow: #{ref.location}: #{ref}"
+    def check_orphan
+      orphan_nodes.each do |ref|
+        raise ParameterError, "found orphan job in the jobnet: #{ref.location}: #{ref}"
       end
     end
 
-    def orphan_nodes(deps)
-      deps.to_a.select {|ref, deps| deps.empty? and not ref.dummy? and not ref.net? }.map {|ref, *| ref }
+    def orphan_nodes
+      @deps.to_a.select {|ref, deps| deps.empty? and not ref.dummy? }.map {|ref, *| ref }
     end
   end
 
-  class JobFlow
+  class JobNet
+    def JobNet.load(path, ref = JobNetRef.for_path(path))
+      File.open(path) {|f|
+        Parser.new(ref).parse_stream(f)
+      }
+    rescue SystemCallError => err
+      raise ParameterError, "could not load jobnet: #{path} (#{err.message})"
+    end
+
     def initialize(ref, location)
       @ref = ref
       @location = location
@@ -154,26 +173,42 @@ module Bricolage
     def to_hash
       h = {}
       @flow.each do |src, dests|
-        h[src.to_s] = dests.map {|d| d.to_s }
+        h[src.to_s] = dests.map(&:to_s)
       end
       h
+    end
+
+    def to_deps_hash
+      h = {}
+      @deps.each do |dest, srcs|
+        h[dest.to_s] = srcs.map(&:to_s)
+      end
+      h
+    end
+
+    def refs
+      @flow.keys | @flow.values.flatten
     end
 
     def net_refs
       @deps.keys.select {|ref| ref.net? }
     end
 
-    # Adds dummy dependencies (@start and @end) to group sub-net jobs
+    # Adds dummy dependencies (@start and @end) to fix up all jobs
+    # into one DAG beginning with @start and ending with @end
     def fix
-      (@flow.keys + @flow.values.flatten).uniq.each do |ref|
+      refs.each do |ref|
         next if ref.dummy?
         unless @deps[ref]
+          (@flow[self.start] ||= []).push ref
           @deps[ref] = [self.start]
         end
         unless @flow[ref]
+          (@flow[ref] ||= []).push self.end
           (@deps[self.end] ||= []).push ref
         end
       end
+      @deps[self.start] ||= []
       @flow.freeze
       @deps.freeze
     end
@@ -187,7 +222,7 @@ module Bricolage
     end
   end
 
-  class JobFlow   # reopen as namespace
+  class JobNet   # reopen as namespace
 
     class FileLoader
       def initialize(ctx)
@@ -197,17 +232,7 @@ module Bricolage
       def load(ref)
         path = @context.root_relative_path(ref.relative_path)
         raise ParameterError, "undefined subnet: #{ref}" unless path.file?
-        load_file(path, ref)
-      end
-
-      private
-
-      def load_file(path, ref)
-        File.open(path) {|f|
-          Parser.new(ref).parse_stream(f)
-        }
-      rescue SystemCallError => err
-        raise ParameterError, "could not load job flow: #{path} (#{err.message})"
+        JobNet.load(path, ref)
       end
     end
 
@@ -217,11 +242,11 @@ module Bricolage
       end
 
       def parse_stream(f)
-        flow = JobFlow.new(@jobnet_ref, Location.for_file(f))
+        net = JobNet.new(@jobnet_ref, Location.for_file(f))
         foreach_edge(f) do |src, dest|
-          flow.add_edge src, dest
+          net.add_edge src, dest
         end
-        flow
+        net
       end
 
       private
@@ -314,14 +339,18 @@ module Bricolage
     end
 
     class JobNetRef < Ref
+      def JobNetRef.for_path(path)
+        new(path.parent.basename, path.basename('.jobnet'), Location.dummy)
+      end
+
       def initialize(subsys, name, location)
         super
-        @flow = nil
+        @jobnet = nil
         @start = nil
         @end = nil
       end
 
-      attr_accessor :flow
+      attr_accessor :jobnet
 
       def net?
         true
@@ -345,11 +374,11 @@ module Bricolage
 
 
       def start
-        @flow.start
+        @jobnet.start
       end
 
       def end
-        @flow.end
+        @jobnet.end
       end
     end
 
