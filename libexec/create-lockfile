@@ -11,6 +11,9 @@ def main
   path, tm = ARGV
   timeout = [tm.to_i, MINIMUM_TIMEOUT].max
   create_lock_file path, timeout
+rescue
+  emit_error_to_psql
+  raise
 end
 
 def create_lock_file(path, timeout)
@@ -18,7 +21,7 @@ def create_lock_file(path, timeout)
   print_message "trying to create lock file: #{path} (psql #{parent_is_psql? ? 'detected' : 'NOT detected'})"
   begin
     File.open(path, File::WRONLY | File::CREAT | File::EXCL) {|f|
-      f.puts "#{Time.now}: created by process \##{Process.ppid}"
+      f.puts "#{Time.now}: created by create-lockfile (Bricolage pid [#{ENV['BRICOLAGE_PID']}])"
     }
   rescue Errno::EEXIST
     if Time.now - start_time > timeout
@@ -27,9 +30,6 @@ def create_lock_file(path, timeout)
     end
     sleep 3
     retry
-  rescue
-    emit_error_to_psql
-    raise
   end
   print_message "lock file created: #{path}"
 end

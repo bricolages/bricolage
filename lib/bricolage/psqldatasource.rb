@@ -186,7 +186,9 @@ module Bricolage
 
     # override
     def run
-      @ds.execute source
+      VacuumLock.using {
+        @ds.execute source
+      }
     end
 
     def run_explain
