@@ -6,7 +6,7 @@ JobClass.define('insert') {
     params.add SQLFileParam.new('table-def', 'PATH', 'Create table file.', optional: true)
     params.add OptionalBoolParam.new('drop', 'DROP table before CREATE.')
     params.add OptionalBoolParam.new('truncate', 'TRUNCATE table before SQL is executed.')
-    params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.')
+    params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.', default: true)
     params.add OptionalBoolParam.new('vacuum', 'VACUUM table after SQL is executed.')
     params.add OptionalBoolParam.new('vacuum-sort', 'VACUUM SORT table after SQL is executed.')
     params.add DataSourceParam.new('sql')

@@ -4,7 +4,7 @@ JobClass.define('insert-delta') {
     params.add DestTableParam.new
     params.add SrcTableParam.new
     params.add StringParam.new('delete-cond', 'SQL_EXPR', 'DELETE condition.')
-    params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.')
+    params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.', default: true)
     params.add OptionalBoolParam.new('vacuum', 'VACUUM table after SQL is executed.')
     params.add OptionalBoolParam.new('vacuum-sort', 'VACUUM SORT table after SQL is executed.')
     params.add DataSourceParam.new('sql')
