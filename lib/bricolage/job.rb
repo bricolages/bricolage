@@ -73,6 +73,7 @@ module Bricolage
     end
 
     def compile
+      param_vals_default = @param_decls.parse_default_values(@global_variables.get_force('defaults'))
       @job_class.invoke_parameters_filter(self)
 
       job_file_rest_vars = @param_vals ? @param_vals.variables : Variables.new
@@ -87,7 +88,7 @@ module Bricolage
         job_v_opt_vars
         #          v High precedence
       )
-      pvals = @param_decls.union_intermediate_values(*[@param_vals, @param_vals_opt].compact)
+      pvals = @param_decls.union_intermediate_values(*[param_vals_default, @param_vals, @param_vals_opt].compact)
       @params = pvals.resolve(@context, base_vars.resolve)
 
       # Then, expand SQL variables and check with declarations.
