@@ -130,6 +130,7 @@ module Bricolage
     end
 
     def execute
+      ENV['BRICOLAGE_PID'] = Process.pid.to_s
       logger = @context.logger
       logger.info "#{@context.environment} environment"
       result = logger.with_elapsed_time {
