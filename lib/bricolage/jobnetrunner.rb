@@ -148,6 +148,9 @@ module Bricolage
       }
     end
 
+    public :puts
+    public :exit
+
     def usage_exit(msg, usage)
       print_error msg
       $stderr.puts usage
