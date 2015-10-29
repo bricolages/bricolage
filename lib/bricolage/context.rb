@@ -87,7 +87,8 @@ module Bricolage
     end
 
     def load_global_variables
-      vars_list = config_pathes(GLOBAL_VARIABLE_FILE).map {|path|
+      subsys_path = scoped? ? [@filesystem.relative(GLOBAL_VARIABLE_FILE)] : []
+      vars_list = (config_pathes(GLOBAL_VARIABLE_FILE) + subsys_path).map {|path|
         path.exist? ? load_variables(path) : nil
       }
       Variables.union(*vars_list.compact)
