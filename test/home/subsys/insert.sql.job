@@ -1,0 +1,7 @@
+/*
+class: insert
+dest-table: d
+src-tables: {s: s}
+*/
+
+insert into $dest_table select * from $s;
