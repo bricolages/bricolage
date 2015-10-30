@@ -55,7 +55,7 @@ module Bricolage
       def source
         buf = StringIO.new
         buf.puts command_args(new_tmpfile_path).join(' ') + " <<EndTDSQL"
-        buf.puts @statement.source
+        buf.puts @statement.stripped_source
         buf.puts 'EndTDSQL'
         buf.string
       end
@@ -67,7 +67,7 @@ module Bricolage
           raise JobFailure, "target file exists: #{@path.inspect}"
         end
         puts @statement.source
-        td_result = make_tmpfile(@statement.source) {|query_path|
+        td_result = make_tmpfile(@statement.stripped_source) {|query_path|
           ds.exec(*command_args(query_path))
         }
         if @gzip

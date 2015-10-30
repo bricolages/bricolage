@@ -26,6 +26,7 @@ module Bricolage
         rescue => err
           raise ParameterError, "#{path}: embedded job definition syntax error: #{err.message}"
         end
+        # avoid changing line number
         stripped_sql = sql.sub(%r{\A/\*.*?^\*/}m, "\n" * block.count("\n"))
         decls = make_sql_declarations(stripped_sql, values, path)
         stmt = SQLStatement.new(StringResource.new(sql, path), decls)
