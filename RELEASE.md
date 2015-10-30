@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.12.2
+
+- [new] td-export job class supports .sql.job file
+
 ## version 5.12.1
 
 - [fix] ensure unlocking VACUUM lock, also when VACUUM statement was failed.
