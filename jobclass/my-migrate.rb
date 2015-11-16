@@ -7,6 +7,7 @@ JobClass.define('my-migrate') {
     params.add DataSourceParam.new('mysql', 'src-ds', 'Source data source.')
     params.add DestFileParam.new('tmp-file', 'PATH', 'Temporary local file path.')
     params.add OptionalBoolParam.new('sqldump', 'If true, use sqldump command to dump, only on available.', default: true)
+    params.add SQLFileParam.new(optional: true)
 
     # Put
     params.add DestFileParam.new('s3-file', 'PATH', 'Temporary S3 file path.')
@@ -99,6 +100,7 @@ JobClass.define('my-migrate') {
   }
 
   def sql_statement(params)
+    return params['sql-file'] if params['sql-file']
     srcs = params['src-tables']
     raise ParameterError, "src-tables must be singleton when no sql-file is given" unless srcs.size == 1
     src_table_var = srcs.keys.first
