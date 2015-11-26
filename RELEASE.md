@@ -1,5 +1,15 @@
 # Bricolage Release Note
 
+## version 5.12.4
+
+- [new] Supports loading from encrypted S3 data source.
+- [new] New job class "createview".
+- [new] Now "create" and "sql" job class support "grant" parameter.
+
+## version 5.12.3
+
+- [new] my-migrate job class supports sql-file parameter for export.
+
 ## version 5.12.2
 
 - [new] td-export job class supports .sql.job file
