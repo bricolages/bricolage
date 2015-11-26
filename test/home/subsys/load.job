@@ -1,0 +1,9 @@
+class: load
+drop: true
+table-def: search_backends.ct
+dest-table: $test_schema.search_backends
+src-file: /search_backends/search_backends.json.gz
+format: json
+options:
+    gzip: true
+    #encrypted: null
