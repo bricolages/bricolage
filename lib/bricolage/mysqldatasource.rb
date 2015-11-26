@@ -4,6 +4,7 @@ require 'json'
 require 'csv'
 require 'stringio'
 require 'open3'
+require 'etc'
 
 module Bricolage
 
@@ -66,7 +67,7 @@ module Bricolage
   end
 
   class MySQLTask < DataSourceTask
-    def export(stmt, path: nil, format: nil, override: false, gzip: false, sqldump: sqldump)
+    def export(stmt, path: nil, format: nil, override: false, gzip: false, sqldump: false)
       add Export.new(stmt, path: path, format: format, override: override, gzip: gzip, sqldump: sqldump)
     end
 
@@ -118,7 +119,7 @@ module Bricolage
       end
 
       def sqldump_available?
-        sqldump_path.executable?
+        sqldump_real_path.executable?
       end
 
       def sqldump_path
@@ -130,7 +131,7 @@ module Bricolage
       end
 
       def platform_name
-        @platform_name ||= `uname -s`
+        @platform_name ||= Etc.uname[:sysname]
       end
 
       def sqldump_usable?
