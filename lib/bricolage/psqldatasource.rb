@@ -499,6 +499,8 @@ module Bricolage
           "#{@name} '#{@value}'"
         when Integer   # maxerror 10
           "#{@name} #{@value}"
+        when nil       # (explicitly disable boolean options)
+          ''
         else
           raise ParameterError, "unsupported type of option value for #{@name}: #{@value.inspect}"
         end
