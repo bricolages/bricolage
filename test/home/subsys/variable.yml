@@ -1,4 +1,5 @@
 defaults:
+    analyze: true
     grant:
         privilege: "select"
         to: "$test_group"
