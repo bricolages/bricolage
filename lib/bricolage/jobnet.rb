@@ -6,7 +6,8 @@ module Bricolage
   # Represents "first" jobnet given by command line (e.g. bricolage-jobnet some.jobnet)
   class RootJobNet
     def RootJobNet.load(ctx, path)
-      root = new(JobNet::FileLoader.new(ctx), JobNet.load(path))
+      id = "#{path.dirname.basename}/#{path.basename('.jobnet')}"
+      root = new(id, JobNet::FileLoader.new(ctx), JobNet.load(path))
       root.load_recursive
       root.fix
       root
@@ -19,13 +20,15 @@ module Bricolage
       root
     end
 
-    def initialize(jobnet_loader, start_jobnet)
+    def initialize(id, jobnet_loader, start_jobnet)
+      @id = id
       @jobnet_loader = jobnet_loader
       @start_jobnet = start_jobnet
       @jobnets = {start_jobnet.ref => start_jobnet}
       @graph = nil
     end
 
+    attr_accessor :id
     attr_reader :start_jobnet
 
     def each_jobnet(&block)
@@ -55,16 +58,26 @@ module Bricolage
       end
     end
 
+    def fixed?
+      !!@dag
+    end
+
     def fix
       each_jobnet do |net|
         net.fix
       end
       @jobnets.freeze
       @dag = JobDAG.build(jobnets)
+      @dag.freeze
     end
 
     def sequential_jobs
       @dag.sequential_jobs
+    end
+
+    def new_session
+      raise '[FATAL] new_session called for unfixed jobnet' unless fixed?
+      JobNetSession.new(@dag, @start_jobnet)
     end
   end
 
@@ -96,8 +109,13 @@ module Bricolage
       end
     end
 
-    def fix
+    def freeze
+      super
       @deps.freeze
+    end
+
+    def fix
+      freeze
       check_cycle
       check_orphan
     end

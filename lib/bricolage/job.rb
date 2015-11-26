@@ -153,68 +153,6 @@ module Bricolage
       logger.error "error: #{ex.class}: #{ex.message}"
       return JobResult.error(ex)
     end
-
-    def execute_in_process(log_path)
-      isolate(log_path) {
-        execute
-      }
-    end
-
-    private
-
-    def isolate(log_path)
-      cpid = Process.fork {
-        Process.setproctitle "bricolage [#{@id}]"
-        redirect_stdouts_to log_path if log_path
-        result = yield
-        save_result result, log_path
-        exit result.status
-      }
-      _, st = Process.waitpid2(cpid)
-      restore_result(st, log_path)
-    end
-
-    def redirect_stdouts_to(path)
-      FileUtils.mkdir_p File.dirname(path)
-      # make readable for retrieve_last_match_from_stderr
-      File.open(path, 'w+') {|f|
-        $stdout.reopen f
-        $stderr.reopen f
-      }
-    end
-
-    def save_result(result, log_path)
-      return if result.success?
-      return unless log_path
-      begin
-        File.open(error_log_path(log_path), 'w') {|f|
-          f.puts result.message
-        }
-      rescue
-      end
-    end
-
-    def restore_result(st, log_path)
-      JobResult.for_process_status(st, restore_message(log_path))
-    end
-
-    def restore_message(log_path)
-      return nil unless log_path
-      msg = read_if_exist(error_log_path(log_path))
-      msg ? msg.strip : nil
-    ensure
-      FileUtils.rm_f error_log_path(log_path) if log_path
-    end
-
-    def error_log_path(log_path)
-      "#{log_path}.error"
-    end
-
-    def read_if_exist(path)
-      File.read(path)
-    rescue
-      nil
-    end
   end
 
 end

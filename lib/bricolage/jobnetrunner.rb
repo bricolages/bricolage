@@ -1,10 +1,11 @@
 require 'bricolage/application'
 require 'bricolage/context'
+require 'bricolage/datasource'
 require 'bricolage/jobnet'
-require 'bricolage/taskqueue'
+require 'bricolage/jobnetsession'
+require 'bricolage/jobnetsessionstore'
 require 'bricolage/job'
 require 'bricolage/jobresult'
-require 'bricolage/datasource'
 require 'bricolage/variables'
 require 'bricolage/eventhandlers'
 require 'bricolage/logfilepath'
@@ -38,33 +39,28 @@ module Bricolage
       opts = Options.new(self)
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse ARGV
-      @ctx = Context.for_application(nil, opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
       @jobnet_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
-      @log_path = opts.log_path
-      jobnet =
-        if opts.jobnet_file.extname == '.job'
-          RootJobNet.load_single_job(@ctx, opts.jobnet_file)
-        else
-          RootJobNet.load(@ctx, opts.jobnet_file)
-        end
-      queue = get_queue(opts)
-      if queue.locked?
-        raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
-      end
-      unless queue.queued?
-        enqueue_jobs jobnet, queue
-        logger.info "jobs are queued." if opts.queue_exist?
+      store = JobNetSessionStore.for_options(opts, @hooks)
+      if session = ss.restore
+        @ctx = ss.context
+        session.check_lock!
+        @ctx.logger.info "jobnet session restored"
+      else
+        @ctx = Context.for_application(nil, opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
+        jobnet = RootJobNet.load(@ctx, opts.jobnet_file)
+        session = ss.new_session(jobnet)
+        @ctx.logger.info "new jobnet session created"
       end
       if opts.list_jobs?
-        list_jobs queue
+        list_jobs session.jobs
         exit EXIT_SUCCESS
       end
-      check_jobs queue
+      check_jobs session.jobs
       if opts.check_only?
         puts "OK"
         exit EXIT_SUCCESS
       end
-      run_queue queue
+      session.execute(opts.log_path)
       exit EXIT_SUCCESS
     rescue OptionError => ex
       raise if $DEBUG
@@ -74,78 +70,16 @@ module Bricolage
       error_exit ex.message
     end
 
-    def logger
-      @ctx.logger
-    end
-
-    def get_queue(opts)
-      if opts.queue_path
-        FileTaskQueue.restore_if_exist(opts.queue_path)
-      else
-        TaskQueue.new
+    def list_jobs(jobs)
+      jobs.each do |job|
+        puts job
       end
     end
 
-    def enqueue_jobs(jobnet, queue)
-      seq = 1
-      jobnet.sequential_jobs.each do |ref|
-        queue.enq JobTask.new(ref)
-        seq += 1
+    def check_jobs(jobs)
+      jobs.each do |job|
+        Job.load_ref(job, @ctx).compile
       end
-      queue.save
-    end
-
-    def list_jobs(queue)
-      queue.each do |task|
-        puts task.job
-      end
-    end
-
-    def check_jobs(queue)
-      queue.each do |task|
-        Job.load_ref(task.job, @ctx).compile
-      end
-    end
-
-    def run_queue(queue)
-      @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
-      queue.consume_each do |task|
-        result = execute_job(task.job, queue)
-        unless result.success?
-          logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
-          logger.error "[job #{task.job}] #{result.message}"
-          @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(false, queue))
-          exit result.status
-        end
-      end
-      @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(true, queue))
-      logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
-      logger.info "status all green"
-    end
-
-    def execute_job(ref, queue)
-      logger.debug "job #{ref}"
-      @job_start_time = Time.now
-      job = Job.load_ref(ref, @ctx)
-      job.compile
-      @hooks.run_before_job_hooks(BeforeJobEvent.new(ref))
-      result = job.execute_in_process(instanciate_log_path(ref))
-      @hooks.run_after_job_hooks(AfterJobEvent.new(result))
-      result
-    rescue Exception => ex
-      logger.exception ex
-      logger.error "unexpected error: #{ref} (#{ex.class}: #{ex.message})"
-      JobResult.error(ex)
-    end
-
-    def instanciate_log_path(ref)
-      return nil unless @log_path
-      @log_path.format(
-        job_ref: ref,
-        jobnet_id: @jobnet_id,
-        job_start_time: @job_start_time,
-        jobnet_start_time: @jobnet_start_time
-      )
     end
 
     public :puts
