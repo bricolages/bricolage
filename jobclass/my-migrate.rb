@@ -27,7 +27,7 @@ JobClass.define('my-migrate') {
     params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.', default: true)
     params.add OptionalBoolParam.new('vacuum', 'VACUUM table after SQL is executed.')
     params.add OptionalBoolParam.new('vacuum-sort', 'VACUUM SORT table after SQL is executed.')
-    params.add KeyValuePairsParam.new('grant', 'KEY:VALUE', 'GRANT table after SQL is executed.')
+    params.add KeyValuePairsParam.new('grant', 'KEY:VALUE', 'GRANT table after SQL is executed. (required keys: privilege, to)')
 
     # All
     params.add OptionalBoolParam.new('export', 'Runs EXPORT task.')
