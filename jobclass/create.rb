@@ -4,6 +4,7 @@ JobClass.define('create') {
     params.add DestTableParam.new
     params.add OptionalBoolParam.new('drop', 'DROP table before CREATE.')
     params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.')
+    params.add KeyValuePairsParam.new('grant', 'KEY:VALUE', 'GRANT table after SQL is executed. (required keys: privilege, to)')
     params.add DataSourceParam.new('sql')
   }
 
@@ -16,6 +17,7 @@ JobClass.define('create') {
       task.drop_force_if params['drop']
       task.exec params['table-def']
       task.analyze_if params['analyze']
+      task.grant_if params['grant'], params['dest-table']
     }
   }
 }
