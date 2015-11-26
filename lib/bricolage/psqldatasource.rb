@@ -232,16 +232,28 @@ module Bricolage
       drop '${dest_table}' if enabled
     end
 
-    def drop_force(target_table)
+    def drop_obj_force(type, name)
       exec SQLStatement.for_string(
         "\\set ON_ERROR_STOP false\n" +
-        "drop table #{target_table} cascade;\n" +
+        "drop #{type} #{name} cascade;\n" +
         "\\set ON_ERROR_STOP true\n"
       )
     end
 
+    def drop_force(target_table)
+      drop_obj_force('table', target_table)
+    end
+
+    def drop_view_force(target_view)
+      drop_obj_force('view', target_view)
+    end
+
     def drop_force_if(enabled)
       drop_force('${dest_table}') if enabled
+    end
+
+    def drop_view_force_if(enabled)
+      drop_view_force('${dest_table}') if enabled
     end
 
     def truncate_if(enabled, target = '${dest_table}')

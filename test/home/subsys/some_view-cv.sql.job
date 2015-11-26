@@ -1,0 +1,11 @@
+/*
+class: createview
+drop: true
+dest-table: some_view
+src-tables:
+    d: d
+*/
+
+create view $dest_table as
+select * from $d
+;
