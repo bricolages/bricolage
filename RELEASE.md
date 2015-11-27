@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.12.5
+
+- [fix] Ruby 2.1 does not have Etc.uname, use uname command instead.
+
 ## version 5.12.4
 
 - [new] Supports loading from encrypted S3 data source.
