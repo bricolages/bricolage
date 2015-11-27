@@ -4,7 +4,6 @@ require 'json'
 require 'csv'
 require 'stringio'
 require 'open3'
-require 'etc'
 
 module Bricolage
 
@@ -131,7 +130,7 @@ module Bricolage
       end
 
       def platform_name
-        @platform_name ||= Etc.uname[:sysname]
+        @platform_name ||= `uname -s`.strip
       end
 
       def sqldump_usable?
