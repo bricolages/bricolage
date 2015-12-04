@@ -57,7 +57,9 @@ module Bricolage
         puts "OK"
         exit EXIT_SUCCESS
       end
+      opts.jobnet_deps.wait
       run_queue queue
+      opts.trigger_dir.create_file_for_jobnet(opts.jobnet_file) if opts.trigger_dir
       exit EXIT_SUCCESS
     rescue OptionError => ex
       raise if $DEBUG
@@ -180,6 +182,8 @@ module Bricolage
         @check_only = false
         @list_jobs = false
         @global_variables = Variables.new
+        @jobnet_deps = []
+        @trigger_dir = TriggerDir.default
         @parser = OptionParser.new
         define_options @parser
       end
@@ -188,6 +192,8 @@ module Bricolage
       attr_reader :jobnet_file
       attr_reader :log_path
       attr_reader :queue_path
+      attr_reader :jobnet_deps
+      attr_reader :trigger_dir
 
       def queue_exist?
         !!@queue_path
@@ -222,6 +228,14 @@ Options:
         parser.on('--queue=PATH', 'Use job queue.') {|path|
           @queue_path = Pathname(path)
         }
+        parser.on('-w', '--depend-on=JOBNET:MAX_WAIT_MIN', 'Waits JOBNET before execution.') {|name_wait|
+          jobnet_name, m = name_wait.split(':', 2)
+          max_wait_min = m ? [m.to_i, 0].max : 0
+          @jobnet_deps.add jobnet_name, (max_wait_min > 0 ? max_wait_min : nil)
+        }
+        parser.on('--trigger-dir=PATH', "Trigger file directory. [default: #{TriggerDir::ENV_KEY}=#{TriggerDir.default_path}]") {|path|
+          @trigger_dir = TriggerDir.new(path)
+        }
         parser.on('-c', '--check-only', 'Checks job parameters and quit without executing.') {
           @check_only = true
         }
@@ -254,6 +268,127 @@ Options:
       rescue OptionParser::ParseError => ex
         raise OptionError, ex.message
       end
+    end
+  end
+
+  class JobNetDependencies
+    def initialize(trigger_dir)
+      @trigger_dir = trigger_dir
+      @deps = []
+    end
+
+    attr_reader :trigger_dir
+
+    def add(jobnet_name, max_wait_min)
+      @deps.push Dep.new(self, jobnet_name, (max_wait_min > 0 ? max_wait_min : nil))
+    end
+
+    WAIT_INTERVAL = 10     # 10 seconds
+    REPORT_INTERVAL = 300  # 5 minutes
+
+    def wait
+      start_time = Time.now
+      last_report_time = start_time
+      until ready?
+        now = Time.now
+        if now - last_report_time > REPORT_INTERVAL
+          logger.info "waiting jobnets..."
+          last_report_time = now
+        end
+        if d = @deps.detect {|dep| dep.max_wait_min && (now - start_time > dep.max_wait_min * 60) }
+          raise JobFailure, "waiting jobnets too long: #{d.name.inspect}"
+        end
+        sleep WAIT_INTERVAL
+      end
+    end
+
+    def ready?
+      @deps.all(&:ready?)
+    end
+
+    class Dep
+      def initialize(deps, name, max_wait_min = nil)
+        @deps = deps
+        @name = name
+        @max_wait_min = max_wait_min
+        @ready = nil
+      end
+
+      attr_reader :name
+      attr_reader :max_wait_min
+
+      def ready?
+        @ready ||= trigger_file.exist?
+      end
+
+      def trigger_file
+        @trigger_file ||= TriggerFile.new(@name, prefix: @deps.trigger_dir)
+      end
+    end
+  end
+
+  class TriggerDir
+    ENV_KEY = 'BRICOLAGE_TRIGGER_DIR'
+
+    def TriggerDir.default_path
+      ENV[ENV_KEY]
+    end
+
+    def TriggerDir.default
+      new(default_dir)
+    end
+
+    def initialize(path)
+      @path = path
+    end
+
+    attr_reader :path
+    alias to_s path
+
+    def create_file_for_jobnet(jobnet_path)
+      TriggerFile.for_jobnet_path(jobnet_path, prefix: @path).create
+    end
+  end
+
+  class TriggerFile
+    def TriggerFile.for_jobnet_path(path, prefix: TriggerDir.default_path)
+      new(name_for_path(path), prefix: prefix)
+    end
+
+    def TriggerFile.name_for_path(path)
+      path = Pathname(path)
+      subsys = path.dirname.basename
+      base = path.basename('.jobnet')
+      "#{subsys}/#{base}"
+    end
+
+    def TriggerFile.for_name(name, prefix: TriggerDir.default_path)
+      new(name, prefix: prefix)
+    end
+
+    def initialize(name, prefix: ENV['BRICOLAGE_TRIGGER_DIR'])
+      @prefix = prefix
+      @name = name
+    end
+
+    attr_reader :prefix
+    attr_reader :name
+
+    def path
+      return nil unless @prefix
+      File.join(prefix, @name.tr('/', '.'))
+    end
+
+    def exist?
+      File.file?(path)
+    end
+
+    def create
+      return unless @prefix
+      FileUtils.mkdir_p @prefix
+      File.open(path, 'w') {|f|
+        f.puts %Q({"status":"success",\n"jobnet": "#{@name}",\n"finished_time":"#{Time.now}"})
+      }
     end
   end
 
