@@ -414,6 +414,7 @@ class StreamingLoadJobClass < RubyJobClass
         when '%S' then '(?<second>\\d{2})'
         when /\A%(\d+)N\z/ then "(?<nanosecond>\\d{#{$1}})"
         when '%Q' then '(?<seq>\\d+)'
+        when '%i' then '(?<uuid>[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12})'
         when '%*' then '[^/]*'
         when '%%' then '%'
         when /\A%/ then raise ParameterError, "unknown time format in s3.file_name config: #{op.inspect}"
