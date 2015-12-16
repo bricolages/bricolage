@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.13.0
+
+- [new] streaming_load: Supports S3 server-side encryption with AWS KMS (Key Management Service).
+- Now Bricolage requires Ruby AWS-SDK v2 for AWS signature v4.
+
 ## version 5.12.5
 
 - [fix] Ruby 2.1 does not have Etc.uname, use uname command instead.
