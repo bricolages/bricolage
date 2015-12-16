@@ -322,7 +322,7 @@ module Bricolage
       unless src_ds.redshift_loader_source?
         raise ParameterError, "input data source does not support redshift as bulk loading source: #{src_ds.name}"
       end
-      provide_default_load_options opts, src_ds
+      opts.provide_defaults(src_ds)
       buf = StringIO.new
       buf.puts "copy #{dest_table}"
       buf.puts "from '#{src_ds.url(src_path)}'"
@@ -333,12 +333,6 @@ module Bricolage
       end
       buf.puts ';'
       buf.string
-    end
-
-    def provide_default_load_options(opts, src_ds)
-      if src_ds.encrypted? and not opts.key?('encrypted')
-        opts['encrypted'] = true
-      end
     end
 
     def format_option(fmt, src_ds, jsonpath)
@@ -475,6 +469,12 @@ module Bricolage
         buf.puts opt
       end
       buf.string
+    end
+
+    def provide_defaults(src_ds)
+      if src_ds.encrypted? and not key?('encrypted')
+        self['encrypted'] = true
+      end
     end
 
     class Option

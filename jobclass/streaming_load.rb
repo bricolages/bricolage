@@ -53,13 +53,15 @@ class StreamingLoadJobClass < RubyJobClass
 
   def make_loader(params)
     ds = params['redshift-ds']
+    load_opts = params['load-options']
+    load_opts.provide_defaults(params['s3-ds'])
     RedshiftStreamingLoader.new(
       data_source: ds,
       queue: make_s3_queue(params),
       table: string(params['dest-table']),
       work_table: string(params['work-table']),
       log_table: string(params['log-table']),
-      load_options: params['load-options'],
+      load_options: load_opts,
       sql: params['sql-file'],
       logger: ds.logger,
       noop: params['noop'],
