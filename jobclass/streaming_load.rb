@@ -3,6 +3,7 @@ require 'bricolage/psqldatasource'
 require 'bricolage/exception'
 require 'json'
 require 'socket'
+require 'forwardable'
 
 class StreamingLoadJobClass < RubyJobClass
   job_class_id 'streaming_load'
@@ -53,13 +54,15 @@ class StreamingLoadJobClass < RubyJobClass
 
   def make_loader(params)
     ds = params['redshift-ds']
+    load_opts = params['load-options']
+    load_opts.provide_defaults(params['s3-ds'])
     RedshiftStreamingLoader.new(
       data_source: ds,
       queue: make_s3_queue(params),
       table: string(params['dest-table']),
       work_table: string(params['work-table']),
       log_table: string(params['log-table']),
-      load_options: params['load-options'],
+      load_options: load_opts,
       sql: params['sql-file'],
       logger: ds.logger,
       noop: params['noop'],
@@ -306,6 +309,8 @@ class StreamingLoadJobClass < RubyJobClass
   end
 
   class S3Queue
+    extend Forwardable
+
     def initialize(data_source:, queue_path:, persistent_path:, file_name:, logger:)
       @ds = data_source
       @queue_path = queue_path
@@ -318,13 +323,15 @@ class StreamingLoadJobClass < RubyJobClass
       @ds.credential_string
     end
 
+    def_delegator '@ds', :encryption
+
     attr_reader :queue_path
 
     def queue_url
       @ds.url(@queue_path)
     end
 
-    def object_url(key)
+    def object_url_direct(key)
       @ds.url(key, no_prefix: true)
     end
 
@@ -334,7 +341,7 @@ class StreamingLoadJobClass < RubyJobClass
 
     def put_control_file(name, data, noop: false)
       @logger.info "s3 put: #{control_file_url(name)}"
-      @ds.object(control_file_path(name)).write(data) unless noop
+      @ds.object(control_file_path(name)).put(body: data) unless noop
       control_file_url(name)
     end
 
@@ -344,37 +351,25 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def control_file_path(name)
-      "#{queue_path}/#{name}"
-    end
-
-    def consume_each(noop: false, &block)
-      each do |obj|
-        yield obj and obj.save(noop: noop)
-      end
+      "#{queue_path}/ctl/#{name}"
     end
 
     def each(&block)
       queued_objects.each(&block)
     end
 
-    def queue_directory
-      @ds.objects_with_prefix(queue_path)
-    end
-
-    def queued_file_nodes
-      queue_directory.as_tree.children.select {|node|
-        node.leaf? and
-          node.key[-1, 1] != '/' and
-          target_file_name?(File.basename(node.key))
-      }
-    end
-
     def queued_objects
-      queued_file_nodes.map {|node| LoadableObject.new(self, node, @logger) }
+      @ds.traverse(queue_path)
+          .select {|obj| target_file_name?(File.basename(obj.key)) }
+          .map {|obj| LoadableObject.new(self, obj, @logger) }
     end
 
     def target_file_name?(name)
       file_name_pattern =~ name
+    end
+
+    def persistent_object(name)
+      @ds.object(persistent_path(name), no_prefix: true)
     end
 
     def persistent_path(name)
@@ -425,9 +420,9 @@ class StreamingLoadJobClass < RubyJobClass
   end
 
   class LoadableObject
-    def initialize(s3queue, node, logger)
+    def initialize(s3queue, object, logger)
       @s3queue = s3queue
-      @node = node
+      @object = object
       @logger = logger
     end
 
@@ -436,7 +431,7 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def path
-      @node.key
+      @object.key
     end
 
     def basename
@@ -444,20 +439,29 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def url
-      @s3queue.object_url(path)
+      @s3queue.object_url_direct(path)
     end
 
-    def save(noop = false)
-      @logger.info "s3 move: #{path} -> #{save_path}"
+    def dequeue(noop = false)
+      @logger.info "s3 move: #{path} -> #{persistent_path}"
       return if noop
-      @node.object.move_to save_path
+      @object.move_to persistent_object, dequeue_options
       @logger.info "file saved"
     end
 
-    alias dequeue save
+    def persistent_object
+      @s3queue.persistent_object(basename)
+    end
 
-    def save_path
+    def persistent_path
       @s3queue.persistent_path(basename)
+    end
+
+    def dequeue_options
+      opts = {
+        server_side_encryption: @s3queue.encryption
+      }
+      opts.reject {|k,v| v.nil? }
     end
   end
 end

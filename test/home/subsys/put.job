@@ -1,0 +1,3 @@
+class: s3-put
+dest-file: test-dest.txt
+src-file: $bricolage_home/data/test.txt
