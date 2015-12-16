@@ -8,22 +8,28 @@ module Bricolage
   class S3DataSource < DataSource
     declare_type 's3'
 
-    def initialize(endpoint: 's3-ap-northeast-1.amazonaws.com',
+    def initialize(
+        endpoint: 's3-ap-northeast-1.amazonaws.com',
+        region: 'ap-northeast-1',
         bucket: nil, prefix: nil,
         access_key_id: nil, secret_access_key: nil, master_symmetric_key: nil,
+        encryption: nil,
         s3cfg: nil)
-      @endpoint = endpoint
-      @bucket = bucket
+      @endpoint = (/\Ahttps?:/ =~ endpoint) ? endpoint : "https://#{endpoint}"
+      @region = region
+      @bucket_name = bucket
       @prefix = (prefix && prefix.empty?) ? nil : prefix
       @access_key_id = access_key_id
       @secret_access_key = secret_access_key
       @master_symmetric_key = master_symmetric_key
+      @encryption = encryption
       @s3cfg = s3cfg
       @configurations = @s3cfg ? load_configurations(@s3cfg) : nil
     end
 
     attr_reader :endpoint
-    attr_reader :bucket
+    attr_reader :region
+    attr_reader :bucket_name
     attr_reader :prefix
 
     def new_task
@@ -64,8 +70,10 @@ module Bricolage
       h
     end
 
+    attr_reader :encryption
+
     def encrypted?
-      !!@master_symmetric_key
+      !!(@master_symmetric_key or @encryption)
     end
 
     #
@@ -73,28 +81,29 @@ module Bricolage
     #
 
     def client
-      @client ||= AWS::S3.new(s3_endpoint: endpoint, access_key_id: access_key, secret_access_key: secret_key)
+      @client ||= Aws::S3::Client.new(region: @region, endpoint: @endpoint, access_key_id: access_key, secret_access_key: secret_key)
     end
 
-    def objects
-      client.buckets[bucket].objects
-    end
-
-    def objects_with_prefix(rel, no_prefix: false)
-      objects.with_prefix(path(rel, no_prefix: no_prefix))
+    def bucket
+      @resource ||= Aws::S3::Resource.new(client: client)
+      @bucket ||= @resource.bucket(@bucket_name)
     end
 
     def object(rel, no_prefix: false)
-      objects[path(rel, no_prefix: no_prefix)]
+      bucket.object(path(rel, no_prefix: no_prefix))
     end
 
     def url(rel, no_prefix: false)
-      "s3://#{@bucket}/#{path(rel, no_prefix: no_prefix)}"
+      "s3://#{@bucket_name}/#{path(rel, no_prefix: no_prefix)}"
     end
 
     def path(rel, no_prefix: false)
-      path = (no_prefix || !prefix) ? rel.to_s : "#{@prefix}/#{rel}"
+      path = (no_prefix || !@prefix) ? rel.to_s : "#{@prefix}/#{rel}"
       path.sub(%r<\A/>, '').gsub(%r<//>, '/')
+    end
+
+    def traverse(rel, no_prefix: false)
+      bucket.objects(prefix: path(rel, no_prefix: no_prefix))
     end
   end
 
@@ -143,7 +152,7 @@ module Bricolage
         raise JobFailure, "no such file: #{@src}" if source_files.empty?
         each_src_dest do |src, dest|
           ds.logger.info command_line(src, dest)
-          ds.object(dest).write(file: src)
+          ds.object(dest).upload_file(src)
         end
         nil
       end
