@@ -472,9 +472,6 @@ module Bricolage
     end
 
     def provide_defaults(src_ds)
-      if src_ds.encrypted? and not key?('encrypted')
-        self['encrypted'] = true
-      end
     end
 
     class Option
