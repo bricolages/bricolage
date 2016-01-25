@@ -42,9 +42,11 @@ class StreamingLoadJobClass < RubyJobClass
   end
 
   def run
-    @loader.dequeue_loaded_files unless @load_only
-    return nil if @dequeue_only
-    @loader.load
+    if @dequeue_only
+      @loader.dequeue
+    else
+      @loader.load
+    end
     nil
   end
 
@@ -108,8 +110,12 @@ class StreamingLoadJobClass < RubyJobClass
 
     attr_reader :sql
 
-    def load
-      load_in_parallel
+    def work_table
+      @work_table || "#{@table}_wk"
+    end
+
+    def log_table
+      @log_table || "#{@table}_l"
     end
 
     def log_basic_info
@@ -118,7 +124,25 @@ class StreamingLoadJobClass < RubyJobClass
       @logger.info "queue: #{@src.queue_url}"
     end
 
-    def load_in_parallel
+    def dequeue
+      log_basic_info
+      @logger.info "dequeue start"
+      objects = @src.queued_objects
+      if objects.empty?
+        @logger.info 'no target data files; exit'
+        return
+      end
+      create_load_log_file(objects) {|log_url|
+        @ds.open {|conn|
+          execute_update conn, copy_load_log_stmt(log_url, @src.credential_string)
+          foreach_loaded_object(objects) do |obj|
+            obj.dequeue(@noop)
+          end
+        }
+      }
+    end
+
+    def load
       log_basic_info
       @logger.info 'load with manifest'
       objects = @src.queued_objects
@@ -126,115 +150,105 @@ class StreamingLoadJobClass < RubyJobClass
         @logger.info 'no target data files; exit'
         return
       end
-      create_manifest_file(objects) {|manifest_url|
+      create_load_log_file(objects) {|log_url|
         @ds.open {|conn|
-          init_work_table conn
-          execute_update conn, copy_manifest_statement(manifest_url, @src.credential_string)
-          @logger.info "load succeeded: #{manifest_url}" unless @noop
-          commit conn, objects
+          create_tmp_log_table(conn, log_url) {|tmp_log_table|
+            loaded, not_loaded = partition_loaded_objects(conn, objects, tmp_log_table)
+            unless @load_only
+              loaded.each do |obj|
+                obj.dequeue(force: true, noop: @noop)
+              end
+            end
+            unless not_loaded.empty?
+              create_manifest_file(not_loaded) {|manifest_url|
+                init_work_table conn
+                execute_update conn, manifest_copy_stmt(work_table, manifest_url)
+                @logger.info "load succeeded: #{manifest_url}" unless @noop
+                commit conn, work_table, tmp_log_table unless @load_only
+              }
+              unless @load_only
+                not_loaded.each do |obj|
+                  obj.dequeue(force: true, noop: @noop)
+                end
+              end
+            end
+          }
         }
-        dequeue_all objects
       }
     end
 
-    def load_in_sequential
-      log_basic_info
-      @logger.info 'load each objects sequentially'
-      objects = @src.queued_objects
-      @ds.open {|conn|
-        init_work_table(conn)
-        objects.each do |obj|
-          @logger.info "load: #{obj.url}"
-          execute_update conn, copy_file_statement(obj)
-          @logger.info "load succeeded: #{obj.url}" unless @noop
-        end
-        commit conn, objects
-      }
-      dequeue_all objects
-    end
-
-    def commit(conn, objects)
-      @end_time = Time.now
-      return if @load_only
+    def commit(conn, work_table, tmp_log_table)
+      @end_time = Time.now   # commit_load_log writes this, generate before that
       transaction(conn) {
-        commit_work_table conn
-        write_load_logs conn, objects
-      }
-    end
-
-    def dequeue_loaded_files
-      @logger.info "dequeue start"
-      objects = @src.queued_objects
-      @ds.open {|conn|
-        objects.each do |obj|
-          if loaded_object?(conn, obj)
-            obj.dequeue(@noop)
-          end
-        end
+        commit_work_table conn, work_table
+        commit_load_log conn, tmp_log_table
       }
     end
 
     private
 
     def init_work_table(conn)
-      return unless @work_table
-      execute_update conn, "truncate #{@work_table};"
+      execute_update conn, "truncate #{work_table};"
     end
 
-    def commit_work_table(conn)
-      return unless @work_table
-      insert_stmt = @sql ? @sql.source : "insert into #{@table} select * from #{@work_table};"
+    def commit_work_table(conn, work_table)
+      insert_stmt = @sql ? @sql.source : "insert into #{@table} select * from #{work_table};"
       execute_update conn, insert_stmt
       # keep work table records for tracing
-    end
-
-    def copy_file_statement(obj)
-      %Q(
-        copy #{load_target_table} from '#{obj.url}'
-        credentials '#{obj.credential_string}'
-        #{@load_options}
-      ;).gsub(/\s+/, ' ').strip
     end
 
     def create_manifest_file(objects)
       manifest_name = "manifest-#{@job_process_id}.json"
       @logger.info "creating manifest: #{manifest_name}"
-      @logger.info "manifest:\n" + make_manifest_json(objects)
-      url = @src.put_control_file(manifest_name, make_manifest_json(objects), noop: @noop)
+      json = make_manifest_json(objects)
+      @logger.info "manifest:\n" + json
+      url = @src.put_control_file(manifest_name, json, noop: @noop)
       yield url
       @src.remove_control_file(File.basename(url), noop: @noop)
     end
 
     def make_manifest_json(objects)
       ents = objects.map {|obj|
-        { "url" => obj.url, "mandatory" => true }
+        { "url" => obj.url, "mandatory" => false }
       }
       JSON.pretty_generate({ "entries" => ents })
     end
 
-    def copy_manifest_statement(manifest_url, credential_string)
+    def manifest_copy_stmt(target_table, manifest_url)
       %Q(
-        copy #{load_target_table}
+        copy #{target_table}
         from '#{manifest_url}'
-        credentials '#{credential_string}'
+        credentials '#{@src.credential_string}'
         manifest
+        statupdate false
         #{@load_options}
       ;).gsub(/\s+/, ' ').strip
     end
 
-    def load_target_table
-      @work_table || @table
+    def create_load_log_file(objects)
+      log_name = "load_log-#{@job_process_id}.csv"
+      @logger.info "creating tmp load log: #{log_name}"
+      csv = make_load_log_csv(objects)
+      @logger.info "load_log:\n" + csv
+      url = @src.put_control_file(log_name, csv, noop: @noop)
+      yield url
+      @src.remove_control_file(File.basename(url), noop: @noop)
     end
 
-    def write_load_logs(conn, objects)
-      return unless @log_table
-      make_load_logs(objects).each do |record|
-        write_load_log conn, record
+    def make_load_log_csv(objects)
+      buf = StringIO.new
+      objects.each do |obj|
+        log = make_load_log(obj)
+        cols = [
+          log.job_process_id,
+          format_timestamp(log.start_time),
+          '',    # end time does not exist yet
+          log.target_table,
+          log.data_file
+        ]
+        buf.puts cols.map {|c| %Q("#{c}") }.join(',')
       end
-    end
-
-    def make_load_logs(objects)
-      objects.map {|obj| make_load_log(obj) }
+      buf.string
     end
 
     def make_load_log(obj)
@@ -243,34 +257,78 @@ class StreamingLoadJobClass < RubyJobClass
 
     LoadLogRecord = Struct.new(:job_process_id, :start_time, :end_time, :target_table, :data_file)
 
-    def write_load_log(conn, record)
-      return unless @log_table
-      execute_update(conn, <<-EndSQL.gsub(/^\s+/, '').strip)
+    def create_tmp_log_table(conn, log_url)
+      target_table = log_table_wk
+      execute_update conn, "create table #{target_table} (like #{@log_table});"
+      execute_update conn, load_log_copy_stmt(target_table, log_url, @src.credential_string)
+      begin
+        yield target_table
+      ensure
+        begin
+          execute_update conn, "drop table #{target_table}"
+        rescue PostgreSQLException => ex
+          @logger.error ex.message + " (ignored)"
+        end
+      end
+    end
+
+    def log_table_wk
+      "#{@log_table}_#{Socket.gethostname.split('.').first}_#{Process.pid}"
+    end
+
+    def load_log_copy_stmt(target_table, log_url, credential_string)
+      %Q(
+        copy #{target_table}
+        from '#{log_url}'
+        credentials '#{credential_string}'
+        delimiter ','
+        removequotes
+      ;).gsub(/\s+/, ' ').strip
+    end
+
+    def partition_loaded_objects(conn, objects, tmp_log_table)
+      recs = conn.execute(<<-EndSQL)
+        select
+            data_file
+            , case when l.job_process_id is not null then 'true' else 'false' end as is_loaded
+        from
+            #{@log_table} l right outer join #{tmp_log_table} t using (data_file)
+        ;
+      EndSQL
+      index = {}
+      objects.each do |obj|
+        index[obj.url] = obj
+      end
+      recs.each do |rec|
+        obj = index[rec['data_file']]
+        obj.loaded = (rec['is_loaded'] == 'true')
+      end
+      objects.partition(&:loaded)
+    end
+
+    def commit_load_log(conn, tmp_table_name)
+      conn.execute(<<-EndSQL)
         insert into #{@log_table}
-        ( job_process_id
-        , start_time
-        , end_time
-        , target_table
-        , data_file
-        )
-        values
-        ( #{sql_string record.job_process_id}
-        , #{sql_timestamp record.start_time}
-        , #{sql_timestamp record.end_time}
-        , #{sql_string record.target_table}
-        , #{sql_string record.data_file}
-        )
+        select
+            job_process_id
+            , start_time
+            , #{sql_timestamp @end_time}
+            , target_table
+            , data_file
+        from
+            #{tmp_table_name}
+        where
+            data_file not in (select data_file from #{@log_table})
         ;
       EndSQL
     end
 
-    def loaded_object?(conn, obj)
-      rs = conn.execute("select count(*) as c from #{@log_table} where data_file = #{sql_string obj.url}")
-      rs.first['c'].to_i > 0
+    def sql_timestamp(time)
+      %Q(timestamp '#{format_timestamp(time)}')
     end
 
-    def sql_timestamp(time)
-      %Q(timestamp '#{time.strftime('%Y-%m-%d %H:%M:%S')}')
+    def format_timestamp(time)
+      time.strftime('%Y-%m-%d %H:%M:%S')
     end
 
     def sql_string(str)
@@ -298,13 +356,6 @@ class StreamingLoadJobClass < RubyJobClass
 
     def mask_secrets(log)
       log.gsub(/\bcredentials\s+'.*?'/mi, "credentials '****'")
-    end
-
-    def dequeue_all(objects)
-      return if @load_only
-      objects.each do |obj|
-        obj.dequeue(@noop)
-      end
     end
   end
 
@@ -424,7 +475,10 @@ class StreamingLoadJobClass < RubyJobClass
       @s3queue = s3queue
       @object = object
       @logger = logger
+      @loaded = nil
     end
+
+    attr_accessor :loaded
 
     def credential_string
       @s3queue.credential_string
@@ -442,11 +496,18 @@ class StreamingLoadJobClass < RubyJobClass
       @s3queue.object_url_direct(path)
     end
 
-    def dequeue(noop = false)
+    def dequeue(force: false, noop: false)
       @logger.info "s3 move: #{path} -> #{persistent_path}"
       return if noop
       @object.move_to persistent_object, dequeue_options
-      @logger.info "file saved"
+      @logger.info "done"
+    rescue Aws::S3::Errors::NoSuchKey => ex
+      @logger.error "S3 error: #{ex.message}"
+      if force
+        @logger.info "move error ignored (may be caused by eventual consistency)"
+      else
+        raise
+      end
     end
 
     def persistent_object
