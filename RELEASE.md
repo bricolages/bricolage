@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.13.1
+
+- [fix] load, streaming_load: "encrypted" load option should not be used for SSE-KMS
+
 ## version 5.13.0
 
 - [new] streaming_load: Supports S3 server-side encryption with AWS KMS (Key Management Service).
