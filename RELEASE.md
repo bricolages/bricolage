@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.14.0
+
+- [new] streaming_load: Fast log check by temporary load log table.
+- [new] streaming_load: Ignores all S3 key-does-not-exist errors; they are caused by S3 eventual consistency.
+
 ## version 5.13.1
 
 - [fix] load, streaming_load: "encrypted" load option should not be used for SSE-KMS
