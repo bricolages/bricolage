@@ -273,7 +273,7 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def log_table_wk
-      "#{@log_table}_#{Socket.gethostname.split('.').first}_#{Process.pid}"
+      "#{@log_table}_tmp#{Process.pid}"
     end
 
     def load_log_copy_stmt(target_table, log_url, credential_string)
