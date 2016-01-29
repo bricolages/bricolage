@@ -134,10 +134,12 @@ class StreamingLoadJobClass < RubyJobClass
       end
       create_load_log_file(objects) {|log_url|
         @ds.open {|conn|
-          execute_update conn, copy_load_log_stmt(log_url, @src.credential_string)
-          foreach_loaded_object(objects) do |obj|
-            obj.dequeue(@noop)
-          end
+          create_tmp_log_table(conn, log_url) {|tmp_log_table|
+            loaded, not_loaded = partition_loaded_objects(conn, objects, tmp_log_table)
+            loaded.each do |obj|
+              obj.dequeue(force: true, noop: @noop)
+            end
+          }
         }
       }
     end
