@@ -1,0 +1,6 @@
+create table dwh_str_load_files_loaded
+( dwh_job_seq bigint encode lzo
+, object_url varchar(1000) encode lzo
+)
+sortkey (dwh_job_seq)
+;

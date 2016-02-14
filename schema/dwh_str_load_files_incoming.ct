@@ -1,0 +1,9 @@
+create table dwh_str_load_files_incoming
+( dwh_task_seq bigint encode lzo
+, object_url varchar(1000) encode lzo
+, message_id varchar(150) encode lzo
+, receipt_handle varchar(300) encode lzo
+, utc_event_time timestamp encode lzo
+)
+sortkey (dwh_task_seq)
+;

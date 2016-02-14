@@ -1,0 +1,11 @@
+create table dwh_processes
+( dwh_proc_seq bigint identity(1,1) encode delta
+, dwh_proc_id varchar(120) encode lzo
+, job_class varchar(64) encode lzo
+, utc_start_time timestamp encode lzo
+, os_pid bigint encode lzo
+, dwh_task_seq bigint encode lzo
+)
+distkey (dwh_proc_seq)
+sortkey (dwh_proc_seq)
+;

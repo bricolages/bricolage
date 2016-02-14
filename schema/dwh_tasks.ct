@@ -1,0 +1,10 @@
+create table dwh_tasks
+( dwh_task_seq bigint identity(1,1) encode lzo
+, dwh_task_id varchar(255) encode lzo
+, dwh_task_class varchar(16) encode lzo
+, schema_name varchar(255) encode lzo
+, table_name varchar(255) encode lzo
+)
+distkey (dwh_task_seq)
+sortkey (dwh_task_seq)
+;
