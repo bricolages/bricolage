@@ -1,0 +1,32 @@
+class: my-import
+src-ds: mysql
+src-tables:
+    users: main.users
+s3-ds: s3
+s3-prefix: shimpeko/test-abc-
+gzip: true
+dump-options:
+    partition_column: id  
+    partition_number: 8
+    write_concurrency: 16
+    rotation_size: 16000000
+    delete_objects: true
+dest-ds: sql
+dest-table: $test_schema.users
+table-def: users.ct
+options:
+    statupdate: false
+    compupdate: false
+    maxerror: 3
+    acceptinvchars: " "
+    #trimblanks: true
+    #truncatecolumns: true
+    ## datetime
+    #acceptanydate: true
+    #dateformat: "auto"
+    #timeformat: "auto"
+vacuum-sort: true
+analyze: true
+grant:
+    privilege: select
+    to: "$test_group"

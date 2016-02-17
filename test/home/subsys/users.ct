@@ -1,0 +1,13 @@
+--dest-table: users
+
+create table $dest_table
+( id int encode delta
+, user_name varchar(1000) encode lzo
+, birthday date encode lzo
+, zip varchar(255) encode lzo
+, created_at timestamp encode lzo
+, updated_at timestamp encode lzo
+)
+distkey (id)
+sortkey (id)
+;
