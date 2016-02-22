@@ -3,4 +3,4 @@
 Bundler.require(:default) if defined?(Bundler)
 require 'bricolage/streaming_load/dispatcher'
 
-Bricoage::StreamingLoad::Dispatcher.main
+Bricolage::StreamingLoad::Dispatcher.main
