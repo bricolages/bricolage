@@ -84,7 +84,7 @@ module Bricolage
         end
       end
 
-      def handle_graceful(e)
+      def handle_shutdown(e)
         @goto_terminate = true
         @event_queue.delete(e)
       end
@@ -254,7 +254,7 @@ module Bricolage
 
       def Event.get_concrete_class(msg, rec)
         case
-        when rec['eventName'] == 'graceful' then GracefulEvent
+        when rec['eventName'] == 'shutdown' then ShutdownEvent
         when rec['eventName'] == 'flush' then FlushEvent
         when rec['eventSource'] == 'aws:s3'
           S3ObjectEvent
@@ -296,14 +296,14 @@ module Bricolage
     end
 
 
-    class GracefulEvent < Event
+    class ShutdownEvent < Event
 
-      def GracefulEvent.parse_sqs_record(msg, rec)
+      def ShutdownEvent.parse_sqs_record(msg, rec)
         {}
       end
 
       def event_id
-        'graceful'
+        'shutdown'
       end
 
     end
