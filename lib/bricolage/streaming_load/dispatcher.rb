@@ -14,32 +14,42 @@ module Bricolage
         require 'yaml'
 
         config = YAML.load(File.read(ARGV[0]))
-pp config
 
-        recv_queue = ReceiveQueue.new(
-          sqs_url: config['recv_queue']['sqs_url'],
-          visibility_timeout: config['recv_queue']['visibility_timeout']
+        sqs_client = SQSClientWrapper.new(Aws::SQS::Client.new)
+        dummy_client = SQSClientWrapper.new(DummySQSClient.new)
+
+        event_queue = EventQueue.new(
+          sqs: sqs_client,
+          sqs_url: config['event_queue']['sqs_url'],
+          visibility_timeout: config['event_queue']['visibility_timeout']
         )
 
         load_queue = LoadQueue.new(
+          sqs: dummy_client,   #sqs_client,
           sqs_url: config['load_queue']['sqs_url']
+        )
+
+        bufs = LoadBufferSet.new(
+          load_queue: load_queue,
+          data_source: nil,   # FIXME: set ds
+          buffer_size_max: 5
         )
 
         url_patterns = URLPatterns.for_config(config['url_patterns'])
 
         dispatcher = Dispatcher.new(
-          recv_queue: recv_queue,
+          event_queue: event_queue,
           load_queue: load_queue,
           url_patterns: url_patterns
         )
 
-        dispatcher.main
+        #dispatcher.main
+        dispatcher.handle_events
       end
 
-      def initialize(recv_queue:, load_queue:, url_patterns:)
-        @recv_queue = recv_queue
-        @load_queue = load_queue
-        @bufs = LoadBufferSet.new(load_queue: load_queue, data_source: nil)   # FIXME: set ds
+      def initialize(event_queue:, load_buffer:, url_patterns:)
+        @event_queue = event_queue
+        @bufs = load_buffer
         @url_patterns = url_patterns
         @goto_terminate = false
       end
@@ -60,15 +70,12 @@ pp config
       def event_loop
         until @goto_terminate
           handle_events
-break
         end
       end
 
       def handle_events
         # FIXME: insert wait?
-        @recv_queue.each_event do |e|
-puts '----- event -----------'
-pp e
+        @event_queue.each do |e|
           mid = "handle_#{e.event_id}"
           # just ignore unknown event to make app migration easy
           if self.respond_to?(mid, true)
@@ -83,8 +90,7 @@ pp e
 
       def handle_data(e)
         unless e.created?
-puts "*** delete event ignored"
-          @recv_queue.delete(e)
+          @event_queue.delete(e)
           return
         end
         obj = e.loadable_object(@url_patterns)
@@ -97,18 +103,18 @@ puts "*** delete event ignored"
       end
 
       def set_flush_timer(table_name, sec)
-        @recv_queue.send_flush_message FlushMessage.new(table_name, sec)
+        @event_queue.send_flush_message FlushMessage.new(table_name, sec)
       end
 
       def handle_flush(e)
         load_task = @bufs[e.table_name].flush
         delete_events(load_task.source_events) if load_task
-        @recv_queue.delete(e)
+        @event_queue.delete(e)
       end
 
       def delete_events(events)
         events.each do |e|
-          @recv_queue.delete(e)
+          @event_queue.delete(e)
         end
       end
 
@@ -184,21 +190,22 @@ puts "*** delete event ignored"
     end
 
 
-    class ReceiveQueue
+    class EventQueue
 
-      def initialize(sqs_url:, visibility_timeout: 1800)
+      def initialize(sqs:, sqs_url:, visibility_timeout: 1800)
+        @sqs = sqs
         @queue_url = sqs_url
         @visibility_timeout = visibility_timeout
-        @sqs = Aws::SQS::Client.new
       end
 
-      def each_event(&block)
+      def each(&block)
         result = receive_messages()
         unless result and result.successful?
           sleep 15
           return
         end
-        Event.for_sqs_result(result).each(&block)
+        events = Event.for_sqs_result(result)
+        events.each(&block)
       end
 
       def receive_messages
@@ -206,15 +213,14 @@ puts "*** delete event ignored"
           queue_url: @queue_url,
           attribute_names: ["All"],
           message_attribute_names: ["All"],
-          max_number_of_messages: 10,
+          max_number_of_messages: 10,   # is max value
           visibility_timeout: @visibility_timeout,
-          wait_time_seconds: 10    # is max value
+          wait_time_seconds: 10   # is max value
         )
       end
 
       def delete(event)
         # TODO: use batch request
-puts "*** delete: #{event.receipt_handle}"
         @sqs.delete_message(
           queue_url: @queue_url,
           receipt_handle: event.receipt_handle
@@ -237,8 +243,6 @@ puts "*** delete: #{event.receipt_handle}"
       def Event.for_sqs_result(result)
         result.messages.flat_map {|msg|
           body = JSON.parse(msg.body)
-puts '==== received ========================'
-pp body
           records = body['Records'] or next []
           records.map {|rec| get_concrete_class(msg, rec).for_sqs_record(msg, rec) }
         }
@@ -263,14 +267,14 @@ pp body
         {
           message_id: msg.message_id,
           receipt_handle: msg.receipt_handle,
-          event: rec['eventName']
+          name: rec['eventName']
         }
       end
 
-      def initialize(message_id:, receipt_handle:, event:)
+      def initialize(message_id:, receipt_handle:, name:)
         @message_id = message_id
         @receipt_handle = receipt_handle
-        @event = event
+        @name = name
       end
 
       def event_id
@@ -279,7 +283,7 @@ pp body
 
       attr_reader :message_id
       attr_reader :receipt_handle
-      attr_reader :event
+      attr_reader :name
 
       def data?
         false
@@ -300,8 +304,8 @@ pp body
         'flush'
       end
 
-      def initialize(message_id:, receipt_handle:, event:, table_name:)
-        super message_id: message_id, receipt_handle: receipt_handle, event: event
+      def initialize(message_id:, receipt_handle:, name:, table_name:)
+        super message_id: message_id, receipt_handle: receipt_handle, name: name
         @table_name = table_name
       end
 
@@ -321,8 +325,8 @@ pp body
         }
       end
 
-      def initialize(message_id:, receipt_handle:, event:, region:, bucket:, key:, size:)
-        super message_id: message_id, receipt_handle: receipt_handle, event: event
+      def initialize(message_id:, receipt_handle:, name:, region:, bucket:, key:, size:)
+        super message_id: message_id, receipt_handle: receipt_handle, name: name
         @region = region
         @bucket = bucket
         @key = key
@@ -348,7 +352,7 @@ pp body
       end
 
       def created?
-        /\AObjectCreated:/ =~ @event
+        /\AObjectCreated:/ =~ @name
       end
 
       def loadable_object(url_patterns)
@@ -385,14 +389,15 @@ pp body
 
     class LoadBufferSet
 
-      def initialize(load_queue:, data_source:)
+      def initialize(load_queue:, data_source:, buffer_size_max: 500)
         @load_queue = load_queue
         @ds = data_source
+        @buffer_size_max = buffer_size_max
         @buffers = {}
       end
 
       def [](key)
-        (@buffers[key] ||= LoadBuffer.new(key, load_queue: @load_queue, data_source: @ds))
+        (@buffers[key] ||= LoadBuffer.new(key, load_queue: @load_queue, data_source: @ds, buffer_size_max: @buffer_size_max))
       end
 
     end
@@ -402,10 +407,13 @@ pp body
 
     class LoadBuffer
 
-      def initialize(qualified_name, load_queue:, data_source:)
+      def initialize(qualified_name, load_queue:, data_source:, buffer_size_max: 500)
         @qualified_name = qualified_name
         @load_queue = load_queue
         @ds = data_source
+        @buffer_size_max = buffer_size_max
+        @buffer = nil
+        @curr_task_id = nil
         clear
       end
 
@@ -420,13 +428,10 @@ pp body
         @buffer.empty?
       end
 
-      #BUFFER_SIZE_MAX = 500
-BUFFER_SIZE_MAX = 5
-
       def put(obj)
         # FIXME: take AWS region into account (Redshift COPY stmt cannot load data from multiple regions)
         @buffer.push obj
-        if @buffer.size >= BUFFER_SIZE_MAX
+        if @buffer.size >= @buffer_size_max
           return flush
         else
           return nil
@@ -488,20 +493,86 @@ BUFFER_SIZE_MAX = 5
 
     class LoadQueue
 
-      def initialize(sqs_url:)
+      def initialize(sqs:, sqs_url:)
+        @sqs = sqs
         @queue_url = sqs_url
-        @sqs = Aws::SQS::Client.new
       end
 
       def put(task)
-        #@sqs.send_message(
-pp(
+        @sqs.send_message(
           queue_url: @queue_url,
           message_body: task.serialize,
           delay_seconds: 0
         )
       end
 
+    end
+
+
+    class SQSClientWrapper
+      def initialize(sqs)
+        @sqs = sqs
+      end
+
+      def receive_message(**args)
+        $stderr.puts "receive_message(#{args.inspect})"
+        @sqs.receive_message(**args)
+      end
+
+      def send_message(**args)
+        $stderr.puts "send_message(#{args.inspect})"
+        @sqs.send_message(**args)
+      end
+
+      def delete_message(**args)
+        $stderr.puts "delete_message(#{args.inspect})"
+        @sqs.delete_message(**args)
+      end
+    end
+
+
+    class DummySQSClient
+      def initialize(queue = [])
+        @queue = queue
+      end
+
+      def receive_message(**args)
+        msg_recs = @queue.shift or return EMPTY_RESULT
+        msgs = msg_recs.map {|recs| Message.new({'Records' => recs}.to_json) }
+        Result.new(true, msgs)
+      end
+
+      def send_message(**args)
+        SUCCESS_RESULT
+      end
+
+      def delete_message(**args)
+        SUCCESS_RESULT
+      end
+
+      class Result
+        def initialize(successful, messages = nil)
+          @successful = successful
+          @messages = messages
+        end
+
+        def successful?
+          @successful
+        end
+
+        attr_reader :messages
+      end
+
+      SUCCESS_RESULT = Result.new(true)
+      EMPTY_RESULT = Result.new(true, [])
+
+      class Message
+        def initialize(body)
+          @body = body
+        end
+
+        attr_reader :body
+      end
     end
 
   end   # module StreamingLoad
