@@ -29,7 +29,7 @@ module Bricolage
           sqs_url: config['load_queue']['sqs_url']
         )
 
-        bufs = LoadBufferSet.new(
+        load_buffer = LoadBufferSet.new(
           load_queue: load_queue,
           data_source: nil,   # FIXME: set ds
           buffer_size_max: 5
@@ -39,12 +39,12 @@ module Bricolage
 
         dispatcher = Dispatcher.new(
           event_queue: event_queue,
-          load_queue: load_queue,
+          load_buffer: load_buffer,
           url_patterns: url_patterns
         )
 
         #dispatcher.main
-        dispatcher.handle_events
+        dispatcher.event_loop
       end
 
       def initialize(event_queue:, load_buffer:, url_patterns:)
@@ -86,6 +86,7 @@ module Bricolage
 
       def handle_graceful(e)
         @goto_terminate = true
+        @event_queue.delete(e)
       end
 
       def handle_data(e)
@@ -98,8 +99,11 @@ module Bricolage
         if buf.empty?
           set_flush_timer obj.qualified_name, buf.load_interval
         end
-        load_task = buf.put(obj)
-        delete_events(load_task.source_events) if load_task
+        buf.put(obj)
+        if buf.full?
+          load_task = buf.flush
+          delete_events(load_task.source_events) if load_task
+        end
       end
 
       def set_flush_timer(table_name, sec)
@@ -250,7 +254,7 @@ module Bricolage
 
       def Event.get_concrete_class(msg, rec)
         case
-        #when '????' then ControlEvent
+        when rec['eventName'] == 'graceful' then GracefulEvent
         when rec['eventName'] == 'flush' then FlushEvent
         when rec['eventSource'] == 'aws:s3'
           S3ObjectEvent
@@ -287,6 +291,19 @@ module Bricolage
 
       def data?
         false
+      end
+
+    end
+
+
+    class GracefulEvent < Event
+
+      def GracefulEvent.parse_sqs_record(msg, rec)
+        {}
+      end
+
+      def event_id
+        'graceful'
       end
 
     end
@@ -428,14 +445,14 @@ module Bricolage
         @buffer.empty?
       end
 
+      def full?
+        @buffer.size >= @buffer_size_max
+      end
+
       def put(obj)
         # FIXME: take AWS region into account (Redshift COPY stmt cannot load data from multiple regions)
         @buffer.push obj
-        if @buffer.size >= @buffer_size_max
-          return flush
-        else
-          return nil
-        end
+        obj
       end
 
       def flush
