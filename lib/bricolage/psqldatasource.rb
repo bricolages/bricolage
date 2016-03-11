@@ -103,7 +103,11 @@ module Bricolage
     end
 
     def query(query)
-      open {|conn| conn.query(query) }
+      open {|conn| conn.execute(query) }
+    end
+    
+    def execute_query(query, &block)
+      open {|conn| conn.execute_query(query, &block) }
     end
 
     def drop_table(name)
@@ -504,5 +508,5 @@ module Bricolage
       end
     end
   end
-
+  
 end

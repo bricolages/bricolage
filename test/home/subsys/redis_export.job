@@ -1,0 +1,6 @@
+class: redis-export
+src-ds: sql
+src-tables:
+    users: $test_schema.users
+dest-ds: redis
+#delete: true
