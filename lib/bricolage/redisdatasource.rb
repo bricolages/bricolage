@@ -41,6 +41,8 @@ module Bricolage
         @key = key
         @encode = encode
         @delete = delete
+        @row_count = 0
+        @success_value = encode_to_hash? ? true : "OK"
       end
 
       def bind(*args)
@@ -62,18 +64,33 @@ module Bricolage
         prefix + "*"
       end
 
+      def encode_to_hash?
+        @encode == 'hash'
+      end
+
       def log_write_result(write_futures)
         count = 0
+        dup_count = 0
         write_futures.each do |f|
-          # invoke Future#value() to raise exception when error
-          # when json
-          count += 1 if f.value == "OK"
-          # when hash
-          count += 1 if f.value == true
+          count, dup_count = count_result(f.value, @success_value, count, dup_count)
         end
-        # divide by column_number when hash (which returns row * columns number of results)
-        count = count / @column_number if @encode == 'hash'
+        # divide by column_count when hash (which returns row * columns count of results)
+        count, dup_count = count_hash_rows(count, dup_count) if encode_to_hash?
+        ds.logger.info "keys already exist: #{dup_count}"
         ds.logger.info "keys written: #{count}"
+      end
+
+      def count_result(result, success_value, count, dup_count)
+        if result == success_value
+          count += 1
+        else
+          dup_count += 1
+        end
+        return count, dup_count
+      end
+
+      def count_hash_rows(count, dup_count)
+        return count / @column_count, dup_count / @column_count
       end
 
       def delete(keys)
@@ -85,24 +102,28 @@ module Bricolage
         futures = []
         @src.execute_query(source) do |rs|
           rs.each do |row|
-            futures.push(set prefix+row['id'], row)
-            # save number of columns for log_writer_result()
-            @column_number = row.size unless @column_number
+            futures.push(set @encode, prefix+row['id'], row)
+            @row_count += 1
           end
+          # save number of columns for log_writer_result()
+          @column_count = rs.first.size unless @column_count
         end
         futures.flatten
       end
 
-      def set(key, row)
+      def set(type, key, row)
         # write only when key does not exist
         fs = []
-        if @encode == 'json'
-          fs.push(ds.client.setnx key, JSON.generate(row))
-        else
+        case type
+        when 'hash'
           # set a value for each key:field pair
           row.each do |field,value|
             fs.push(ds.client.hsetnx key, field, value)
           end
+        when 'json'
+          fs.push(ds.client.setnx key, JSON.generate(row))
+        else
+          raise "\"encode: #{type}\" is not supported"
         end
         fs
       end
@@ -121,6 +142,7 @@ module Bricolage
           raise JobFailure, ex.message
         end
         ds.logger.info "Keys deleted: #{@delete_future.value}" if @delete
+        ds.logger.info "Keys read: #{@row_count}"
         log_write_result @futures
         JobResult.success
       end
