@@ -58,62 +58,75 @@ module Bricolage
       end
 
       def import
-        ds.client.pipelined do
-          read_row do |row|
-            ds.client.pipelined do
-              write_row(row)
+        results = []
+        @src.cursor_transaction {
+          read_count = 0
+          loop do
+            futures = []
+            ds.client.pipelined do 
+              read_count = read_row do |row|
+                futures.push write_row row
+              end
             end
+            results.push futures.flatten.map {|f| f.value}.all?
+            break if read_count == 0
           end
-        end
+        }
+        @cursor = nil
+        results.all?
       end
 
       def read_row
-        @src.execute_query(source) do |rs|
+        rs_size = 0
+        @cursor = @src.cursor_execute_query(source, cursor: @cursor) do |rs|
+          rs_size = rs.values.size
+          break if rs_size == 0
           rs.each do |row|
             yield row
             @read_count += 1
             ds.logger.info "Rows read: #{@read_count}" if @read_count % 100000 == 0
           end
         end
+        rs_size
       end
 
-      def write_row(row, &block)
+      def write_row(row)
         key = key(row)
-        data = delete_key_columns(row)
+        data = reject_key_columns(row)
+        f = []
         case @encode
         when 'hash'
           # set a value for each key:field pair
-          r = []
           data.each do |field,value|
-            r.push ds.client.hset(key, field, value)
+            f.push ds.client.hset(key, field, value)
           end
         when 'json'
-          r = ds.client.set(key, JSON.generate(data))
+          f.push ds.client.set(key, JSON.generate(data))
         else
           raise %Q("encode: #{type}" is not supported)
         end
-        if block
-          yield ds.client.expire(key, expire) if expire
-          yield r
-        end
-        ds.logger.info "Key sample: #{key}" if @write_count == 0
+        f.push ds.client.expire(key, @expire) if @expire
         @write_count += 1
+        return f
       end
 
-      def delete_key_columns(row)
-        @key_columns.each do |k|
-          row.delete k
+      def reject_key_columns(row)
+        r = {}
+        @key_columns.each do |key|
+          r = row.reject {|k,v| k == key}
         end
-        row.empty? ? {0 => 0} : row
+        r.empty? ? {0 => 0} : r
       end
 
       def key(row)
-        prefix + @key_columns.map {|k| row[k]}.join('_')
+        key = prefix + @key_columns.map {|k| row[k]}.join('_')
+        ds.logger.info "Key sample: #{key}" if @write_count == 0
+        key
       end
 
       def run
         begin
-          import
+          raise "Unexpected error. Please check data." unless import
         rescue => ex
           ds.logger.error ex.backtrace.join("\n")
           raise JobFailure, ex.message

@@ -5,4 +5,5 @@ src-tables:
 dest-ds: redis
 prefix: ha_ucp_
 key-column: user_id, recipe_id
+encode: json
 expire: 1

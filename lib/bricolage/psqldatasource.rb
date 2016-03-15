@@ -110,6 +110,28 @@ module Bricolage
       open {|conn| conn.execute_query(query, &block) }
     end
 
+    def cursor_transaction(&block)
+      raise "Cursor in use" if cursor_in_transaction?
+      conn = PG::Connection.open(host: @host, port: @port, dbname: @database, user: @user, password: password)
+      @cur_conn = PostgresConnection.new(conn, self, logger)
+      @cur_conn.execute("begin transaction")
+      yield
+    ensure
+      @cur_conn.execute("commit") if cursor_in_transaction?
+      @cur_conn.clear_cursor if @cur_conn
+      @cur_conn = nil
+      conn.close if conn
+    end
+
+    def cursor_execute_query(query, fetch_size: 10000, cursor: nil, &block)
+      raise "Begin transaction before invoking this method" unless cursor_in_transaction?
+      @cur_conn.execute_query_with_cursor(query, fetch_size, cursor, &block)
+    end
+
+    def cursor_in_transaction?
+      @cur_conn && @cur_conn.in_transaction?
+    end
+
     def drop_table(name)
       open {|conn| conn.drop_table(name) }
     end

@@ -1,4 +1,5 @@
 require 'bricolage/exception'
+require 'securerandom'
 require 'pg'
 
 module Bricolage
@@ -10,6 +11,7 @@ module Bricolage
       @connection = connection
       @ds = ds
       @logger = logger
+      @cursor = nil
     end
 
     def source
@@ -31,6 +33,32 @@ module Bricolage
     def execute_query(query, &block)
       @logger.info "[#{@ds.name}] #{query}"
       exec(query, &block)
+    end
+
+    def execute_query_with_cursor(query, fetch_size, cursor, &block)
+      raise "Begin transaction before invoking this method" unless in_transaction?
+      if @cursor.nil?
+        @cursor = cursor || (0...32).map { alphabets[rand(alphabets.length)] }.join
+        @connection.exec("declare #{@cursor} cursor for #{query}")
+      elsif !@cursor.nil? && cursor.nil?
+        raise "Cursor in use"
+      elsif @cursor != cursor
+        raise "Invalid cursor"
+      end
+      yield @connection.exec("fetch #{fetch_size} in #{@cursor}")
+      return @cursor
+    end
+
+    def clear_cursor
+      @cursor = nil
+    end
+
+    def alphabets
+      @alphabets = @alphabets || [('a'...'z'), ('A'...'Z')].map { |i| i.to_a }.flatten
+    end
+
+    def in_transaction?
+      @connection.transaction_status == PG::Constants::PQTRANS_INTRANS
     end
 
     alias update execute
@@ -88,5 +116,4 @@ module Bricolage
       end
     end
   end
-
 end

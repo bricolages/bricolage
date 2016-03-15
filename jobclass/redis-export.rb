@@ -26,7 +26,7 @@ JobClass.define('redis-export') {
         params['key-column'] || "id",
         params['prefix'],
         params['encode'] || "hash",
-        expire: params['expire']
+        expire: params['expire'].to_i
     }
   }
 
