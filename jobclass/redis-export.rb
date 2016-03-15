@@ -14,6 +14,7 @@ JobClass.define('redis-export') {
     params.add StringParam.new('key-column', 'REDIS_KEY', 'Redis object key. default: id', optional: true)
     params.add StringParam.new('prefix', 'REDIS_PREFIX', 'Redis object key prefix', optional: true)
     params.add StringParam.new('encode', 'REDIS_ENCODE', 'Redis object encoding. default: hash', optional: true)
+    params.add StringParam.new('expire', 'REDIS_TTL', 'Redis object TTL. default: none', optional: true)
   }
 
   script {|params, script|
@@ -24,7 +25,8 @@ JobClass.define('redis-export') {
         sql_statement(params),
         params['key-column'] || "id",
         params['prefix'],
-        params['encode'] || "hash"
+        params['encode'] || "hash",
+        expire: params['expire']
     }
   }
 

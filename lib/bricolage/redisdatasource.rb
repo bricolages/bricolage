@@ -28,19 +28,19 @@ module Bricolage
   end
 
   class RedisTask < DataSourceTask
-    def import(src, table, query, key_column, prefix, encode)
-      add Import.new(src, table, query, key_column, prefix, encode)
+    def import(src, table, query, key_column, prefix, encode, expire: nil)
+      add Import.new(src, table, query, key_column, prefix, encode, expire)
     end
 
     class Import < Action
-      def initialize(src, table, query, key_column, prefix, encode)
+      def initialize(src, table, query, key_column, prefix, encode, expire)
         @src = src
         @table = table
         @query = query
-        @key_column = key_column
-        puts key_column
+        @key_columns = key_column.split(',').map(&:strip)
         @prefix = prefix
         @encode = encode
+        @expire = expire
         @read_count = 0
         @write_count = 0
       end
@@ -58,8 +58,12 @@ module Bricolage
       end
 
       def import
-        read_row do |row|
-          write_row(row)
+        ds.client.pipelined do
+          read_row do |row|
+            ds.client.pipelined do
+              write_row(row)
+            end
+          end
         end
       end
 
@@ -75,26 +79,36 @@ module Bricolage
 
       def write_row(row, &block)
         key = key(row)
+        data = delete_key_columns(row)
         case @encode
         when 'hash'
           # set a value for each key:field pair
           r = []
-          row.each do |field,value|
+          data.each do |field,value|
             r.push ds.client.hset(key, field, value)
           end
         when 'json'
-          r = ds.client.set(key, JSON.generate(row))
+          r = ds.client.set(key, JSON.generate(data))
         else
           raise %Q("encode: #{type}" is not supported)
         end
-        yield r if block
+        if block
+          yield ds.client.expire(key, expire) if expire
+          yield r
+        end
         ds.logger.info "Key sample: #{key}" if @write_count == 0
         @write_count += 1
       end
 
+      def delete_key_columns(row)
+        @key_columns.each do |k|
+          row.delete k
+        end
+        row.empty? ? {0 => 0} : row
+      end
+
       def key(row)
-        key_columns = @key_column.split(',').map(&:strip).map {|k| row[k]}
-        prefix + key_columns.join('_')
+        prefix + @key_columns.map {|k| row[k]}.join('_')
       end
 
       def run
