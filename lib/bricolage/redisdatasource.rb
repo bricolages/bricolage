@@ -42,7 +42,7 @@ module Bricolage
         @encode = encode
         @delete = delete
         @row_count = 0
-        @success_value = encode_to_hash? ? true : "OK"
+        @success_value = encode_to_hash? ? 1 : "OK"
       end
 
       def bind(*args)
