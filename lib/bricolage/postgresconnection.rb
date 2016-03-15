@@ -75,14 +75,18 @@ module Bricolage
     end
     
     def exec(query, &block)
-      rs = @connection.exec(query)
-      begin rs
-        yield rs
-      ensure
-        rs.clear
+      @connection.send_query(query)
+      @connection.set_single_row_mode
+      loop do
+        rs = @connection.get_result or break
+        begin
+          rs.check
+          yield rs
+        ensure
+          rs.clear
+        end
       end
     end
-        
   end
 
 end

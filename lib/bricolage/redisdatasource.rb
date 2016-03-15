@@ -29,19 +29,19 @@ module Bricolage
   end
 
   class RedisTask < DataSourceTask
-    def import(src, table, query, key, prefix, encode)
-      add Import.new(src, table, query, key, encode)
+    def import(src, table, query, key_column, prefix, encode)
+      add Import.new(src, table, query, key_column, encode)
     end
 
     class Import < Action
-      def initialize(src, table, query, key, encode)
+      def initialize(src, table, query, key_column, encode)
         @src = src
         @table = table
         @query = query
-        @key = key
+        @key_column = key_column
         @encode = encode
-        @row_count = 0
-        @success_value = encode_to_hash? ? 1 : "OK"
+        @read_count = 0
+        @write_count = 0
       end
 
       def bind(*args)
@@ -53,68 +53,57 @@ module Bricolage
       end
 
       def prefix
-        return @prefix unless @prefix.nil?
-        @prefix = "#{@table.last.name}_#{@table.last.schema}_"
-        ds.logger.info "Key Pattern: #{@prefix}<#{@key}>"
-        @prefix
+        @prefix = @prefix || "#{@table.last.name}_#{@table.last.schema}_"
       end
 
-      def key_pattern
-        prefix + "*"
+      def import
+        read_row do |row|
+          write_row(row)
+        end
       end
 
-      def encode_to_hash?
-        @encode == 'hash'
-      end
-
-      def log_write_result(write_futures)
-        count = write_futures.count {|f| f.value == @success_value}
-        # divide by column_count when hash (which returns row * columns count of results)
-        count = count / @column_count if encode_to_hash?
-        ds.logger.info "keys written: #{count}"
-      end
-
-      def write
-        futures = []
+      def read_row
         @src.execute_query(source) do |rs|
           rs.each do |row|
-            futures.push(set @encode, prefix+row['id'], row)
-            @row_count += 1
+            yield row
+            @read_count += 1
+            ds.logger.info "Rows read: #{@read_count}" if @read_count % 100000 == 0
           end
-          # save number of columns for log_writer_result()
-          @column_count = rs.first.size unless @column_count
         end
-        futures.flatten
       end
 
-      def set(type, key, row)
-        # write only when key does not exist
-        fs = []
-        case type
+      def write_row(row, &block)
+        key = key(row)
+        case @encode
         when 'hash'
           # set a value for each key:field pair
+          r = []
           row.each do |field,value|
-            fs.push(ds.client.hset key, field, value)
+            r.push ds.client.hset(key, field, value)
           end
         when 'json'
-          fs.push(ds.client.set key, JSON.generate(row))
+          r = ds.client.set(key, JSON.generate(row))
         else
           raise "\"encode: #{type}\" is not supported"
         end
-        fs
+        yield r if block
+        ds.logger.info "Key sample: #{key}" if @write_count == 0
+        @write_count += 1
+      end
+
+      def key(row)
+        key_columns = @key_column.split(',').map(&:strip).map {|k| row[k]}
+        prefix + key_columns.join('_')
       end
 
       def run
         begin
-          ds.client.pipelined do # for bulk processing (futures only available after pipeline finished)
-              @futures = write
-          end
+          import
         rescue => ex
           ds.logger.error ex.backtrace.join("\n")
           raise JobFailure, ex.message
         end
-        ds.logger.info "Keys read: #{@row_count}"
-        log_write_result @futures
+        ds.logger.info "Rows written: #{@write_count}"
         JobResult.success
       end
     end
