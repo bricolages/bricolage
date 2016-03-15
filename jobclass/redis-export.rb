@@ -13,8 +13,7 @@ JobClass.define('redis-export') {
     params.add DataSourceParam.new('redis', 'dest-ds', 'Redis cluster')
     params.add StringParam.new('key-column', 'REDIS_KEY', 'Redis object key. default: id', optional: true)
     params.add StringParam.new('prefix', 'REDIS_PREFIX', 'Redis object key prefix', optional: true)
-    params.add StringParam.new('encode', 'REDIS_ENCODE', 'Redis object encoding. default: json', optional: true)
-    params.add OptionalBoolParam.new('delete', "Delete all objects with specified key prefix", default: false)
+    params.add StringParam.new('encode', 'REDIS_ENCODE', 'Redis object encoding. default: hash', optional: true)
   }
 
   script {|params, script|
@@ -25,8 +24,7 @@ JobClass.define('redis-export') {
           sql_statement(params),
           params['key-column'] || "id",
           params['prefix'],
-          params['encode'] || "hash",
-          delete: params['delete']
+          params['encode'] || "hash"
       }
   }
 
