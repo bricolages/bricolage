@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.15.0
+
+- [new][EXPERIMENTAL] new job class redis-export.
+
 ## version 5.14.0
 
 - [new] streaming_load: Fast log check by temporary load log table.
