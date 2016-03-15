@@ -119,13 +119,14 @@ module Bricolage
       end
 
       def key(row)
-        key = prefix + @key_columns.map {|k| row[k]}.join('_')
-        ds.logger.info "Key sample: #{key}" if @write_count == 0
-        key
+        prefix + @key_columns.map {|k| row[k]}.join('_')
       end
 
       def run
         begin
+          ds.logger.info "Key Pattern: #{prefix}<#{@key_columns.join('_')}>"
+          ds.logger.info "Encode: #{@encode}"
+          ds.logger.info "Expire: #{@expire}"
           raise "Unexpected error. Please check data." unless import
         rescue => ex
           ds.logger.error ex.backtrace.join("\n")

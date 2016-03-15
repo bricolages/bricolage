@@ -39,13 +39,17 @@ module Bricolage
       raise "Begin transaction before invoking this method" unless in_transaction?
       if @cursor.nil?
         @cursor = cursor || (0...32).map { alphabets[rand(alphabets.length)] }.join
-        @connection.exec("declare #{@cursor} cursor for #{query}")
+        declare_cursor = "declare #{@cursor} cursor for #{query}"
+        @logger.info "[#{@ds.name}] #{declare_cursor}"
+        @connection.exec(declare_cursor)
       elsif !@cursor.nil? && cursor.nil?
         raise "Cursor in use"
       elsif @cursor != cursor
         raise "Invalid cursor"
       end
-      yield @connection.exec("fetch #{fetch_size} in #{@cursor}")
+      fetch = "fetch #{fetch_size} in #{@cursor}"
+      @logger.info "[#{@ds.name}] #{fetch}" if cursor.nil?
+      yield @connection.exec(fetch)
       return @cursor
     end
 
