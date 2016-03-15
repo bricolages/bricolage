@@ -508,5 +508,5 @@ module Bricolage
       end
     end
   end
-  
+
 end

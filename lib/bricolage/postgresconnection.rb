@@ -27,12 +27,12 @@ module Bricolage
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
     end
-    
+
     def execute_query(query, &block)
       @logger.info "[#{@ds.name}] #{query}"
       exec(query, &block)
     end
-    
+
     alias update execute
 
     def drop_table(name)

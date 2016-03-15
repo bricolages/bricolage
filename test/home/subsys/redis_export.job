@@ -3,3 +3,4 @@ src-ds: sql
 src-tables:
     users: $test_schema.users
 dest-ds: redis
+key-column: id, user_name

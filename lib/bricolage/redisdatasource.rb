@@ -11,7 +11,7 @@ module Bricolage
     def initialize(host: 'localhost', port: 6380, **opts)
       @host = host
       @port = port
-      @opts = opts
+      @options = opts
     end
 
     attr_reader :host
@@ -23,22 +23,23 @@ module Bricolage
     end
 
     def client
-      @client = Redis.new(:host => @host, :port => @port, **@opts) unless @client
-      @client
+      @client = @client || Redis.new(:host => @host, :port => @port, **@options)
     end
   end
 
   class RedisTask < DataSourceTask
     def import(src, table, query, key_column, prefix, encode)
-      add Import.new(src, table, query, key_column, encode)
+      add Import.new(src, table, query, key_column, prefix, encode)
     end
 
     class Import < Action
-      def initialize(src, table, query, key_column, encode)
+      def initialize(src, table, query, key_column, prefix, encode)
         @src = src
         @table = table
         @query = query
         @key_column = key_column
+        puts key_column
+        @prefix = prefix
         @encode = encode
         @read_count = 0
         @write_count = 0
@@ -53,7 +54,7 @@ module Bricolage
       end
 
       def prefix
-        @prefix = @prefix || "#{@table.last.name}_#{@table.last.schema}_"
+        @prefix = @prefix || "#{@table.last.schema}_#{@table.last.name}_"
       end
 
       def import
@@ -84,7 +85,7 @@ module Bricolage
         when 'json'
           r = ds.client.set(key, JSON.generate(row))
         else
-          raise "\"encode: #{type}\" is not supported"
+          raise %Q("encode: #{type}" is not supported)
         end
         yield r if block
         ds.logger.info "Key sample: #{key}" if @write_count == 0

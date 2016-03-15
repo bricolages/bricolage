@@ -18,14 +18,14 @@ JobClass.define('redis-export') {
 
   script {|params, script|
     # Export
-      script.task(params['dest-ds']) {|task|
-        task.import params['src-ds'],
-          params['src-tables'].first,
-          sql_statement(params),
-          params['key-column'] || "id",
-          params['prefix'],
-          params['encode'] || "hash"
-      }
+    script.task(params['dest-ds']) {|task|
+      task.import params['src-ds'],
+        params['src-tables'].first,
+        sql_statement(params),
+        params['key-column'] || "id",
+        params['prefix'],
+        params['encode'] || "hash"
+    }
   }
 
   def sql_statement(params)
