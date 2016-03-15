@@ -28,6 +28,11 @@ module Bricolage
       raise PostgreSQLException.wrap(ex)
     end
 
+    def execute_query(query, &block)
+      @logger.info "[#{@ds.name}] #{query}"
+      exec(query, &block)
+    end
+
     alias update execute
 
     def drop_table(name)
@@ -43,12 +48,7 @@ module Bricolage
     def select(table, &block)
       query = "select * from #{table}"
       @logger.info "[#{@ds.name}] #{query}"
-      rs = @connection.exec(query)
-      begin
-        yield rs
-      ensure
-        rs.clear
-      end
+      exec(query, &block)
     end
 
     def vacuum(table)
@@ -72,6 +72,20 @@ module Bricolage
       e = Time.now
       t = e - b
       @logger.info "#{'%.1f' % t} secs"
+    end
+    
+    def exec(query, &block)
+      @connection.send_query(query)
+      @connection.set_single_row_mode
+      loop do
+        rs = @connection.get_result or break
+        begin
+          rs.check
+          yield rs
+        ensure
+          rs.clear
+        end
+      end
     end
   end
 
