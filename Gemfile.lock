@@ -5,7 +5,7 @@ PATH
       aws-sdk (~> 2)
       mysql2
       pg
-      redis (>= 3.2.2)
+      redis (>= 3.0.0)
       td
 
 GEM
