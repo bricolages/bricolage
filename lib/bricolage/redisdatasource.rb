@@ -28,19 +28,19 @@ module Bricolage
   end
 
   class RedisTask < DataSourceTask
-    def import(src, table, query, key_column, prefix, encode)
-      add Import.new(src, table, query, key_column, prefix, encode)
+    def import(src, table, query, key_column, prefix, encode, expire: nil)
+      add Import.new(src, table, query, key_column, prefix, encode, expire)
     end
 
     class Import < Action
-      def initialize(src, table, query, key_column, prefix, encode)
+      def initialize(src, table, query, key_column, prefix, encode, expire)
         @src = src
         @table = table
         @query = query
-        @key_column = key_column
-        puts key_column
+        @key_columns = key_column.split(',').map(&:strip)
         @prefix = prefix
         @encode = encode
+        @expire = expire
         @read_count = 0
         @write_count = 0
       end
@@ -58,48 +58,76 @@ module Bricolage
       end
 
       def import
-        read_row do |row|
-          write_row(row)
-        end
+        results = []
+        @src.cursor_transaction {
+          read_count = 0
+          loop do
+            futures = []
+            ds.client.pipelined do 
+              read_count = read_row do |row|
+                futures.push write_row row
+              end
+            end
+            results.push futures.flatten.map {|f| f.value}.all?
+            break if read_count == 0
+          end
+        }
+        @cursor = nil
+        results.all?
       end
 
       def read_row
-        @src.execute_query(source) do |rs|
+        rs_size = 0
+        @cursor = @src.cursor_execute_query(source, cursor: @cursor) do |rs|
+          rs_size = rs.values.size
+          break if rs_size == 0
           rs.each do |row|
             yield row
             @read_count += 1
             ds.logger.info "Rows read: #{@read_count}" if @read_count % 100000 == 0
           end
         end
+        rs_size
       end
 
-      def write_row(row, &block)
+      def write_row(row)
         key = key(row)
+        data = delete_key_columns(row)
+        f = []
         case @encode
         when 'hash'
           # set a value for each key:field pair
-          r = []
-          row.each do |field,value|
-            r.push ds.client.hset(key, field, value)
+          data.each do |field,value|
+            f.push ds.client.hset(key, field, value)
           end
         when 'json'
-          r = ds.client.set(key, JSON.generate(row))
+          f.push ds.client.set(key, JSON.generate(data))
         else
           raise %Q("encode: #{type}" is not supported)
         end
-        yield r if block
-        ds.logger.info "Key sample: #{key}" if @write_count == 0
+        f.push ds.client.expire(key, @expire) if @expire
         @write_count += 1
+        return f
+      end
+
+      def delete_key_columns(row)
+        r = row.dup
+        @key_columns.each do |key|
+          r.delete(key)
+        end
+        r.empty? ? {1 => 1} : r
       end
 
       def key(row)
-        key_columns = @key_column.split(',').map(&:strip).map {|k| row[k]}
-        prefix + key_columns.join('_')
+        prefix + @key_columns.map {|k| row[k]}.join('_')
       end
 
       def run
         begin
-          import
+          ds.logger.info "Key Pattern: #{prefix}<#{@key_columns.join('_')}>"
+          ds.logger.info "Encode: #{@encode}"
+          ds.logger.info "Expire: #{@expire}"
+          raise "Unexpected error. Please check data." unless import
         rescue => ex
           ds.logger.error ex.backtrace.join("\n")
           raise JobFailure, ex.message

@@ -1,6 +1,9 @@
 class: redis-export
 src-ds: sql
 src-tables:
-    users: $test_schema.users
+    user_cook_recipes: $test_schema.user_cook_recipes
 dest-ds: redis
-key-column: id, user_name
+prefix: ha_ucp_
+key-column: user_id, recipe_id
+encode: hash
+expire: 604800
