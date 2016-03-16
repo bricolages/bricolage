@@ -92,7 +92,7 @@ module Bricolage
 
       def write_row(row)
         key = key(row)
-        data = reject_key_columns(row)
+        data = delete_key_columns(row)
         f = []
         case @encode
         when 'hash'
@@ -110,12 +110,12 @@ module Bricolage
         return f
       end
 
-      def reject_key_columns(row)
-        r = {}
+      def delete_key_columns(row)
+        r = row.dup
         @key_columns.each do |key|
-          r = row.reject {|k,v| k == key}
+          r.delete(key)
         end
-        r.empty? ? {0 => 0} : r
+        r.empty? ? {1 => 1} : r
       end
 
       def key(row)
