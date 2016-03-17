@@ -58,22 +58,18 @@ module Bricolage
       end
 
       def import
-        results = []
         @src.cursor_transaction {
           read_count = 0
           loop do
-            futures = []
             ds.client.pipelined do 
               read_count = read_row do |row|
-                futures.push write_row row
+                write_row row
               end
             end
-            results.push futures.flatten.map {|f| f.value}.all?
             break if read_count == 0
           end
         }
         @cursor = nil
-        results.all?
       end
 
       def read_row
@@ -127,7 +123,7 @@ module Bricolage
           ds.logger.info "Key Pattern: #{prefix}<#{@key_columns.join('_')}>"
           ds.logger.info "Encode: #{@encode}"
           ds.logger.info "Expire: #{@expire}"
-          raise "Unexpected error. Please check data." unless import
+          import
         rescue => ex
           ds.logger.error ex.backtrace.join("\n")
           raise JobFailure, ex.message
