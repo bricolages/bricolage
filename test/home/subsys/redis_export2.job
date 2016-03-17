@@ -1,0 +1,8 @@
+class: redis-export
+src-ds: sql
+src-tables:
+    user_cook_recipes: $test_schema.user_cook_recipes
+dest-ds: redis
+key-column: user_id
+encode: json
+expire: 60

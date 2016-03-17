@@ -43,9 +43,9 @@ module Bricolage
         @logger.info "[#{@ds.name}] #{declare_cursor}"
         @connection.exec(declare_cursor)
       elsif !@cursor.nil? && cursor.nil?
-        raise "Cursor in use"
+        raise "Cannot declare new cursor. Cursor in use: #{@cursor}"
       elsif @cursor != cursor
-        raise "Invalid cursor"
+        raise "Specified cursor not exists. Specified: #{cursor}, Current: #{@cursor}"
       end
       fetch = "fetch #{fetch_size} in #{@cursor}"
       @logger.info "[#{@ds.name}] #{fetch}" if cursor.nil?
