@@ -8,15 +8,15 @@ module Bricolage
   class RedisDataSource < DataSource
     declare_type 'redis'
 
-    def initialize(host: 'localhost', port: 6380, **opts)
+    def initialize(host: 'localhost', port: 6380, **options)
       @host = host
       @port = port
-      @options = opts
+      @options = options
     end
 
     attr_reader :host
     attr_reader :port
-    attr_reader :opts
+    attr_reader :options
 
     def new_task
       RedisTask.new(self)
