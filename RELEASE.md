@@ -1,5 +1,13 @@
 # Bricolage Release Note
 
+## version 5.15.2
+
+- [fix] redis-export: remove un-required error check.
+
+## version 5.15.1
+
+- [new] redis-export: make faster using cursor and Redis pipeline.
+
 ## version 5.15.0
 
 - [new][EXPERIMENTAL] new job class redis-export.
@@ -52,3 +60,4 @@
 ## version 5.10.0
 
 - streaming_load: new option --sql-file
+
