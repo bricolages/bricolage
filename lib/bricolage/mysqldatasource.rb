@@ -177,25 +177,25 @@ module Bricolage
     def s3export(table, stmt, s3ds, prefix, gzip, dump_options)
       options = dump_options.nil? ? {} : dump_options[:dump_options]
       add S3Export.new(table, stmt, s3ds, prefix, gzip: gzip,
-                       format: options['format'],
-                       partition_column: options['partition_column'],
-                       partition_number: options['partition_number'],
-                       write_concurrency: options['write_concurrency'],
-                       rotation_size: options['rotation_size'],
-                       delete_objects: options['delete_objects'],
-                       object_key_delimiter: options['object_key_delimiter'])
+        format: options['format'],
+        partition_column: options['partition_column'],
+        partition_number: options['partition_number'],
+        write_concurrency: options['write_concurrency'],
+        rotation_size: options['rotation_size'],
+        delete_objects: options['delete_objects'],
+        object_key_delimiter: options['object_key_delimiter'])
     end
 
-    class S3Export < Export
+    class S3Export < Action
 
       def initialize(table, stmt, s3ds, prefix, gzip: true,
-                     format: "json",
-                     partition_column: nil,
-                     partition_number: 4,
-                     write_concurrency: 4,
-                     rotation_size: nil,
-                     delete_objects: false,
-                     object_key_delimiter: nil)
+         format: "json",
+         partition_column: nil,
+         partition_number: 4,
+         write_concurrency: 4,
+         rotation_size: nil,
+         delete_objects: false,
+         object_key_delimiter: nil)
         @table = table
         @statement = stmt
         @s3ds = s3ds
@@ -210,21 +210,30 @@ module Bricolage
         @object_key_delimiter = object_key_delimiter
       end
 
+      def run
+        s3export
+        JobResult.success
+      end
+
+      def bind(*args)
+        @statement.bind(*args)
+      end
+
       def s3export
-        cmd = build_cmd command_parameters
-        ds.logger.info '[CMD] ' + cmd
-        Open3.popen2e(cmd) do |input, output, thread|
+        cmd = build_cmd(command_parameters)
+        ds.logger.info '[CMD] ' + cmd.join(' ')
+        Open3.popen2e(*cmd) do |input, output, thread|
           input.close
           output.each do |line|
             puts line
           end
           unless thread.value.success?
-            raise JobFailure, "#{cmd} failed (status #{thread.value.to_i})"
+            raise JobFailure, "#{cmd.join(' ')} failed (status #{thread.value.to_i})"
           end
         end
       end
 
-      def commad_parameters()
+      def command_parameters
         params = {jar: mys3dump_path.to_s, h: ds.host, P: ds.port.to_s, D: ds.database, u: ds.username, p: ds.password,
                    o: connection_property, t: @table, q: @statement.stripped_source.chop,
                    'Daws.accessKeyId': @s3ds.access_key, 'Daws.secretKey': @s3ds.secret_key, b: @s3ds.bucket.name, x: @prefix}
@@ -239,20 +248,15 @@ module Bricolage
         params
       end
 
-      def connection_property()
-        map = {}
-        puts ds.mysql_params
-        map[:encoding] = 'useUnicode=true&characterEncoding'
-        map[:read_timeout] = 'netTimeoutForStreamingResults'
-        map[:connect_timeout] = 'connectTimeout'
-        map[:reconnect] = 'autoReconnect'
-        property = ""
-        amp = ""
-        ds.mysql_options.each do |k, v|
-          property += amp + map[k] + '=' + v if map[k]
-          amp = '&'
-        end
-        property
+      OPTION_MAP = {
+        encoding: 'useUnicode=true&characterEncoding',
+        read_timeout: 'netTimeoutForStreamingResults',
+        connect_timeout: 'connectTimeout',
+        reconnect: 'autoReconnect'
+      }
+
+      def connection_property
+        ds.mysql_options.map {|k, v| opt = OPTION_MAP[k] ; opt ? "#{opt}=#{v}" : nil }.compact.join('&')
       end
 
       def build_prefix(ds_prefix, pm_prefix)
@@ -263,18 +267,8 @@ module Bricolage
         Pathname(__dir__).parent.parent + "libexec/mys3dump.jar"
       end
 
-      def run
-        s3export
-        JobResult.success
-      end
-
       def build_cmd(options)
-        cmd = "java"
-        options.each do |k, v|
-          cmd = "#{cmd} -#{k}"
-          cmd += %Q( "#{v}") if v
-        end
-        cmd
+        ['java'] + options.flat_map {|k, v| v ? ["-#{k}", v.to_s] : ["-#{k}"] }
       end
     end
 
