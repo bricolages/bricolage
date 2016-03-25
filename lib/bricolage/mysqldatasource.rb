@@ -216,7 +216,7 @@ module Bricolage
       end
 
       def bind(*args)
-        @statement.bind(*args)
+        @statement.bind(*args) if @statement
       end
 
       def s3export
@@ -234,9 +234,9 @@ module Bricolage
       end
 
       def command_parameters
-        params = {jar: mys3dump_path.to_s, h: ds.host, P: ds.port.to_s, D: ds.database, u: ds.username, p: ds.password,
-                   o: connection_property, t: @table, q: @statement.stripped_source.chop,
+        params = {jar: mys3dump_path.to_s, h: ds.host, P: ds.port.to_s, D: ds.database, u: ds.username, p: ds.password, o: connection_property, t: @table,
                    'Daws.accessKeyId': @s3ds.access_key, 'Daws.secretKey': @s3ds.secret_key, b: @s3ds.bucket.name, x: @prefix}
+        params[:q] = @statement.stripped_source.chop if @statement
         params[:f] = @format if @format
         params[:C] = nil if @gzip
         params[:c] = @partition_column if @partition_column

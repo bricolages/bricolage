@@ -32,12 +32,6 @@ JobClass.define('my-import') {
     params.add OptionalBoolParam.new('gzip', 'Compress Temporary files.')
   }
 
-  declarations {|params|
-    decls = sql_statement(params).declarations
-    decls.declare 'dest-table', nil
-    decls
-  }
-
   script {|params, script|
     run_all = !params['export'] && !params['put'] && !params['load']
 
@@ -45,7 +39,7 @@ JobClass.define('my-import') {
     if params['export'] || run_all
       script.task(params['src-ds']) {|task|
         task.s3export params['src-tables'].keys.first,
-                      sql_statement(params),
+                      params['sql-file'],
                       params['s3-ds'],
                       params['s3-prefix'],
                       params['gzip'],
@@ -82,23 +76,4 @@ JobClass.define('my-import') {
       }
     end
   }
-
-  def sql_statement(params)
-    return params['sql-file'] if params['sql-file']
-    srcs = params['src-tables']
-    raise ParameterError, "src-tables must be singleton when no sql-file is given" unless srcs.size == 1
-    src_table_var = srcs.keys.first
-    query = add_place_holder(params, "select * from $#{src_table_var}")
-    stmt = SQLStatement.for_string(query)
-    stmt.declarations = Declarations.new({src_table_var => src_table_var})
-    stmt
-  end
-
-  def add_place_holder(params, query)
-    if params['dump-options']['partition_column']
-      return query + " WHERE @PARTITION_CONDITION@;"
-    else
-      return query + ";"
-    end
-  end
 }
