@@ -17,15 +17,16 @@ module Bricolage
 
 
     class FlushMessage
-      def initialize(table_name, sec)
+      def initialize(table_name, sec, head_url)
         @table_name = table_name
         @delay_seconds = sec
+        @head_url
       end
 
       attr_reader :delay_seconds
 
       def body
-        { 'eventName' => 'flush', 'tableName' => @table_name }
+        { 'eventName' => 'flush', 'tableName' => @table_name, 'headUrl' => @head_url }
       end
     end
 

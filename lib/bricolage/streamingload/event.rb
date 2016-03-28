@@ -76,7 +76,8 @@ module Bricolage
 
       def FlushEvent.parse_sqs_record(msg, rec)
         {
-          table_name: rec['tableName']
+          table_name: rec['tableName'],
+          head_url: rec['headUrl']
         }
       end
 
@@ -84,12 +85,14 @@ module Bricolage
         'flush'
       end
 
-      def initialize(message_id:, receipt_handle:, name:, table_name:)
+      def initialize(message_id:, receipt_handle:, name:, table_name:, head_url:)
         super message_id: message_id, receipt_handle: receipt_handle, name: name
         @table_name = table_name
+        @head_url = head_url
       end
 
       attr_reader :table_name
+      attr_reader :head_url
 
     end
 

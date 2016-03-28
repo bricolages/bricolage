@@ -16,8 +16,11 @@ module Bricolage
         ENV['AWS_REGION'] = 'ap-northeast-1'
         require 'pp'
         require 'yaml'
+        require 'bricolage'
 
         config = YAML.load(File.read(ARGV[0]))
+
+        ctx = Context.for_application('.')
 
         sqs_client = SQSClientWrapper.new(Aws::SQS::Client.new)
         dummy_client = SQSClientWrapper.new(DummySQSClient.new)
@@ -35,8 +38,8 @@ module Bricolage
 
         load_buffer = LoadBufferSet.new(
           load_queue: load_queue,
-          data_source: nil,   # FIXME: set ds
-          buffer_size_max: 5
+          data_source: ctx.get_data_source('sql', 'sql'),
+          buffer_size_max: 3
         )
 
         url_patterns = URLPatterns.for_config(config['url_patterns'])
@@ -48,7 +51,8 @@ module Bricolage
         )
 
         #dispatcher.main
-        dispatcher.event_loop
+        #dispatcher.event_loop
+        dispatcher.handle_events
       end
 
       def initialize(event_queue:, load_buffer:, url_patterns:)
@@ -101,7 +105,7 @@ module Bricolage
         obj = e.loadable_object(@url_patterns)
         buf = @bufs[obj.qualified_name]
         if buf.empty?
-          set_flush_timer obj.qualified_name, buf.load_interval
+          set_flush_timer obj.qualified_name, buf.load_interval, obj.url
         end
         buf.put(obj)
         if buf.full?
@@ -110,12 +114,12 @@ module Bricolage
         end
       end
 
-      def set_flush_timer(table_name, sec)
-        @event_queue.send_flush_message FlushMessage.new(table_name, sec)
+      def set_flush_timer(table_name, sec, head_url)
+        @event_queue.send_message FlushMessage.new(table_name, sec, head_url)
       end
 
       def handle_flush(e)
-        load_task = @bufs[e.table_name].flush
+        load_task = @bufs[e.table_name].flush_if(head_url: e.head_url)
         delete_events(load_task.source_events) if load_task
         @event_queue.delete(e)
       end

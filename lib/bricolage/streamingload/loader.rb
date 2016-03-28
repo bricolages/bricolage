@@ -34,10 +34,6 @@ module Bricolage
 
       attr_reader :sql
 
-      def work_table
-        @work_table || "#{@table}_wk"
-      end
-
       def log_table
         @log_table || "#{@table}_l"
       end
@@ -60,11 +56,10 @@ module Bricolage
         }
       end
 
-      def load_objects(conn, work_table, task)
+      def load_objects(conn, dest_table, task)
         ManifestFile.create(task, @ctl_bucket, @logger) {|manifest|
-          conn.execute "truncate #{work_table}"
           conn.execute(<<-";".strip.gsub(/\s+/, ' '))
-            copy #{work_table}
+            copy #{dest_table}
             from '#{manifest.url}'
             credentials '#{manifest.credential_string}'
             manifest
@@ -86,7 +81,7 @@ module Bricolage
       def commit_work_table(conn, work_table)
         insert_stmt = @sql ? @sql.source : "insert into #{@table} select * from #{work_table};"
         conn.execute(insert_stmt)
-        # keep work table records for tracing
+        # keep work table records for later tracking
       end
 
       def commit_load_log(conn)
@@ -216,26 +211,16 @@ module Bricolage
         @logger = logger
       end
 
-      def transaction
-        execute 'begin transaction'
-        yield
-        execute 'commit'
+      def transaction(&block)
+        @conn.transaction(&block)
       end
 
-      def execute(sql)
+      def execute(query)
         if @noop
-          log_query(sql)
+          @conn.log_query(query)
         else
-          @conn.execute(sql)
+          @conn.execute(query)
         end
-      end
-
-      def log_query(sql)
-        @logger.info "[#{@ds.name}] #{mask_secrets(sql)}"
-      end
-
-      def mask_secrets(log)
-        log.gsub(/\bcredentials\s+'.*?'/mi, "credentials '****'")
       end
 
     end
