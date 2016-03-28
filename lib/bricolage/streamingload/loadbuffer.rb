@@ -34,15 +34,22 @@ module Bricolage
 
     class LoadBufferSet
 
-      def initialize(load_queue:, data_source:, buffer_size_max: 500)
+      def initialize(load_queue:, data_source:, buffer_size_max: 500, logger:)
         @load_queue = load_queue
         @ds = data_source
         @buffer_size_max = buffer_size_max
+        @logger = logger
         @buffers = {}
       end
 
       def [](key)
-        (@buffers[key] ||= LoadBuffer.new(key, load_queue: @load_queue, data_source: @ds, buffer_size_max: @buffer_size_max))
+        (@buffers[key] ||= LoadBuffer.new(
+          key,
+          load_queue: @load_queue,
+          data_source: @ds,
+          buffer_size_max: @buffer_size_max,
+          logger: @logger
+        ))
       end
 
     end
@@ -50,11 +57,12 @@ module Bricolage
 
     class LoadBuffer
 
-      def initialize(qualified_name, load_queue:, data_source:, buffer_size_max: 500)
+      def initialize(qualified_name, load_queue:, data_source:, buffer_size_max: 500, logger:)
         @qualified_name = qualified_name
         @load_queue = load_queue
         @ds = data_source
         @buffer_size_max = buffer_size_max
+        @logger = logger
         @buffer = nil
         @curr_task_id = nil
         clear
@@ -93,6 +101,7 @@ module Bricolage
       def flush
         objects = @buffer
         return nil if objects.empty?
+        @logger.debug "flush initiated: #{@qualified_name} task_id=#{@curr_task_id}"
         objects.freeze
         task = LoadTask.new(task_id: @curr_task_id, objects: objects)
         write_task_payload task

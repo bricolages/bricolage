@@ -28,18 +28,21 @@ module Bricolage
         event_queue = EventQueue.new(
           sqs: sqs_client,
           sqs_url: config['event_queue']['sqs_url'],
-          visibility_timeout: config['event_queue']['visibility_timeout']
+          visibility_timeout: config['event_queue']['visibility_timeout'],
+          logger: ctx.logger
         )
 
         load_queue = LoadQueue.new(
           sqs: dummy_client,   #sqs_client,
-          sqs_url: config['load_queue']['sqs_url']
+          sqs_url: config['load_queue']['sqs_url'],
+          logger: ctx.logger
         )
 
         load_buffer = LoadBufferSet.new(
           load_queue: load_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
-          buffer_size_max: 3
+          buffer_size_max: 3,
+          logger: ctx.logger
         )
 
         url_patterns = URLPatterns.for_config(config['url_patterns'])
@@ -47,18 +50,19 @@ module Bricolage
         dispatcher = Dispatcher.new(
           event_queue: event_queue,
           load_buffer: load_buffer,
-          url_patterns: url_patterns
+          url_patterns: url_patterns,
+          logger: ctx.logger
         )
 
         #dispatcher.main
-        #dispatcher.event_loop
-        dispatcher.handle_events
+        dispatcher.event_loop
       end
 
-      def initialize(event_queue:, load_buffer:, url_patterns:)
+      def initialize(event_queue:, load_buffer:, url_patterns:, logger:)
         @event_queue = event_queue
         @bufs = load_buffer
         @url_patterns = url_patterns
+        @logger = logger
         @goto_terminate = false
       end
 
@@ -76,20 +80,28 @@ module Bricolage
       end
 
       def event_loop
+        n_zero = 0
         until @goto_terminate
-          handle_events
+          sleep(2 ** n_zero) if n_zero > 0
+          n_msg = handle_events()
+          if n_msg == 0
+            n_zero += 1
+          else
+            n_zero = 0
+          end
         end
       end
 
       def handle_events
-        # FIXME: insert wait?
-        @event_queue.each do |e|
+        n_msg = @event_queue.each do |e|
+          @logger.debug "handling event: #{e.name}"
           mid = "handle_#{e.event_id}"
           # just ignore unknown event to make app migration easy
           if self.respond_to?(mid, true)
             __send__(mid, e)
           end
         end
+        n_msg
       end
 
       def handle_shutdown(e)

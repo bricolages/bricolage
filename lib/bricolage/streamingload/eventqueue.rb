@@ -20,7 +20,7 @@ module Bricolage
       def initialize(table_name, sec, head_url)
         @table_name = table_name
         @delay_seconds = sec
-        @head_url
+        @head_url = head_url
       end
 
       attr_reader :delay_seconds
@@ -33,20 +33,23 @@ module Bricolage
 
     class EventQueue
 
-      def initialize(sqs:, sqs_url:, visibility_timeout: 1800)
+      def initialize(sqs:, sqs_url:, visibility_timeout: 1800, logger: logger)
         @sqs = sqs
         @queue_url = sqs_url
         @visibility_timeout = visibility_timeout
+        @logger = logger
       end
 
       def each(&block)
         result = receive_messages()
         unless result and result.successful?
+          @logger.error "ReceiveMessage failed: #{result.error.message}"
           sleep 15
           return
         end
         events = Event.for_sqs_result(result)
         events.each(&block)
+        events.size
       end
 
       def receive_messages

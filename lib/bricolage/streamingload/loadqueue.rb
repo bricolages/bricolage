@@ -39,9 +39,10 @@ module Bricolage
 
     class LoadQueue
 
-      def initialize(sqs:, sqs_url:)
+      def initialize(sqs:, sqs_url:, logger:)
         @sqs = sqs
         @queue_url = sqs_url
+        @logger = logger
       end
 
       def put(task)
