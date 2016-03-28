@@ -1,5 +1,4 @@
 require 'bricolage/exception'
-require 'securerandom'
 require 'pg'
 
 module Bricolage
@@ -11,14 +10,13 @@ module Bricolage
       @connection = connection
       @ds = ds
       @logger = logger
-      @cursor = nil
     end
 
     def source
       @connection
     end
 
-    def execute(query)
+    def execute_update(query)
       @logger.info "[#{@ds.name}] #{query}"
       log_elapsed_time {
         rs = @connection.exec(query)
@@ -30,42 +28,97 @@ module Bricolage
       raise PostgreSQLException.wrap(ex)
     end
 
+    alias execute execute_update
+    alias update execute_update
+
+    def select(table, &block)
+      execute_query("select * from #{table}", &block)
+    end
+
     def execute_query(query, &block)
       @logger.info "[#{@ds.name}] #{query}"
-      exec(query, &block)
+      rs = log_elapsed_time {
+        @connection.exec(query)
+      }
+      result = yield rs
+      rs.clear
+      result
+    rescue PG::Error => ex
+      raise PostgreSQLException.wrap(ex)
     end
 
-    def execute_query_with_cursor(query, fetch_size, cursor, &block)
-      raise "Begin transaction before invoking this method" unless in_transaction?
-      if @cursor.nil?
-        @cursor = cursor || (0...32).map { alphabets[rand(alphabets.length)] }.join
-        declare_cursor = "declare #{@cursor} cursor for #{query}"
-        @logger.info "[#{@ds.name}] #{declare_cursor}"
-        @connection.exec(declare_cursor)
-      elsif !@cursor.nil? && cursor.nil?
-        raise "Cannot declare new cursor. Cursor in use: #{@cursor}"
-      elsif @cursor != cursor
-        raise "Specified cursor not exists. Specified: #{cursor}, Current: #{@cursor}"
+    alias query execute_query
+
+    def query_batch(query, batch_size = 5000, &block)
+      open_cursor(query) {|cur|
+        cur.each_result_set(batch_size, &block)
+      }
+    end
+
+    def streaming_execute_query(query, &block)
+      @logger.info "[#{@ds.name}] #{query}"
+      log_elapsed_time {
+        @connection.send_query(query)
+      }
+      @connection.set_single_row_mode
+      while rs = @connection.get_result
+        begin
+          rs.check
+          yield rs
+        ensure
+          rs.clear
+        end
       end
-      fetch = "fetch #{fetch_size} in #{@cursor}"
-      @logger.info "[#{@ds.name}] #{fetch}" if cursor.nil?
-      yield @connection.exec(fetch)
-      return @cursor
-    end
-
-    def clear_cursor
-      @cursor = nil
-    end
-
-    def alphabets
-      @alphabets = @alphabets || [('a'...'z'), ('A'...'Z')].map { |i| i.to_a }.flatten
+    rescue PG::Error => ex
+      raise PostgreSQLException.wrap(ex)
     end
 
     def in_transaction?
       @connection.transaction_status == PG::Constants::PQTRANS_INTRANS
     end
 
-    alias update execute
+    def transaction
+      execute 'begin transaction'
+      yield
+      execute 'commit'
+    end
+
+    def open_cursor(query, name = nil, &block)
+      unless in_transaction?
+        transaction {
+          return open_cursor(query, &block)
+        }
+      end
+      name ||= make_unique_cursor_name
+      execute "declare #{name} cursor for #{query}"
+      yield Cursor.new(name, self, @logger)
+    end
+
+    Thread.current['bricolage_cursor_seq'] = 0
+
+    def make_unique_cursor_name
+      seq = (Thread.current['bricolage_cursor_seq'] += 1)
+      "cur_bric_#{$$}_#{'%X' % Thread.current.object_id}_#{seq}"
+    end
+
+    class Cursor
+      def initialize(name, conn, logger)
+        @name = name
+        @conn = conn
+        @logger = logger
+      end
+
+      attr_reader :name
+
+      def each_result_set(fetch_size = 5000)
+        while true
+          @conn.execute_query("fetch #{fetch_size} in #{@name}") {|rs|
+            return if rs.values.empty?
+            yield rs
+          }
+        end
+      end
+    end
 
     def drop_table(name)
       execute "drop table #{name} cascade;"
@@ -75,12 +128,6 @@ module Bricolage
       drop_table name
     rescue PostgreSQLException => err
       @logger.error err.message
-    end
-
-    def select(table, &block)
-      query = "select * from #{table}"
-      @logger.info "[#{@ds.name}] #{query}"
-      exec(query, &block)
     end
 
     def vacuum(table)
@@ -105,19 +152,6 @@ module Bricolage
       t = e - b
       @logger.info "#{'%.1f' % t} secs"
     end
-    
-    def exec(query, &block)
-      @connection.send_query(query)
-      @connection.set_single_row_mode
-      loop do
-        rs = @connection.get_result or break
-        begin
-          rs.check
-          yield rs
-        ensure
-          rs.clear
-        end
-      end
-    end
   end
+
 end

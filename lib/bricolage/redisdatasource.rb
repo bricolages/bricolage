@@ -22,8 +22,9 @@ module Bricolage
       RedisTask.new(self)
     end
 
-    def client
-      @client = @client || Redis.new(:host => @host, :port => @port, **@options)
+    def open
+      client = Redis.new(host: @host, port: @port, **@options)
+      yield client
     end
   end
 
@@ -38,11 +39,9 @@ module Bricolage
         @table = table
         @query = query
         @key_columns = key_column.split(',').map(&:strip)
-        @prefix = prefix
+        @prefix = prefix || "#{@table.last.schema}_#{@table.last.name}_"
         @encode = encode
         @expire = expire
-        @read_count = 0
-        @write_count = 0
       end
 
       def bind(*args)
@@ -53,84 +52,102 @@ module Bricolage
         @query.stripped_source
       end
 
-      def prefix
-        @prefix = @prefix || "#{@table.last.schema}_#{@table.last.name}_"
-      end
-
-      def import
-        @src.cursor_transaction {
-          read_count = 0
-          loop do
-            ds.client.pipelined do 
-              read_count = read_row do |row|
-                write_row row
-              end
-            end
-            break if read_count == 0
-          end
-        }
-        @cursor = nil
-      end
-
-      def read_row
-        rs_size = 0
-        @cursor = @src.cursor_execute_query(source, cursor: @cursor) do |rs|
-          rs_size = rs.values.size
-          break if rs_size == 0
-          rs.each do |row|
-            yield row
-            @read_count += 1
-            ds.logger.info "Rows read: #{@read_count}" if @read_count % 100000 == 0
-          end
-        end
-        rs_size
-      end
-
-      def write_row(row)
-        key = key(row)
-        data = delete_key_columns(row)
-        f = []
-        case @encode
-        when 'hash'
-          # set a value for each key:field pair
-          data.each do |field,value|
-            f.push ds.client.hset(key, field, value)
-          end
-        when 'json'
-          f.push ds.client.set(key, JSON.generate(data))
-        else
-          raise %Q("encode: #{type}" is not supported)
-        end
-        f.push ds.client.expire(key, @expire) if @expire
-        @write_count += 1
-        return f
-      end
-
-      def delete_key_columns(row)
-        r = row.dup
-        @key_columns.each do |key|
-          r.delete(key)
-        end
-        r.empty? ? {1 => 1} : r
-      end
-
-      def key(row)
-        prefix + @key_columns.map {|k| row[k]}.join('_')
-      end
-
       def run
+        logger = ds.logger
         begin
-          ds.logger.info "Key Pattern: #{prefix}<#{@key_columns.join('_')}>"
-          ds.logger.info "Encode: #{@encode}"
-          ds.logger.info "Expire: #{@expire}"
-          import
+          logger.info "Key Pattern: #{@prefix}<#{@key_columns.join('_')}>"
+          logger.info "Encode: #{@encode}"
+          logger.info "Expire: #{@expire}"
+          ds.open {|client|
+            writer = RedisRowWriter.for_encode(@encode).new(client, @prefix, @key_columns)
+            import writer
+          }
         rescue => ex
-          ds.logger.error ex.backtrace.join("\n")
+          logger.exception ex
           raise JobFailure, ex.message
         end
-        ds.logger.info "Rows written: #{@write_count}"
         JobResult.success
+      end
+
+      BATCH_SIZE = 5000
+
+      def import(writer)
+        count = 0
+        @src.query_batch(source, BATCH_SIZE) do |rs|
+          writer.pipelined {
+            rs.each do |row|
+              writer.write(row)
+              count += 1
+              ds.logger.info "transfered: #{count} rows" if count % 100_0000 == 0
+            end
+          }
+        end
+        ds.logger.info "all rows written: #{count} rows"
       end
     end
   end
+
+  class RedisRowWriter
+    def RedisRowWriter.for_encode(encode)
+      case encode
+      when 'hash' then RedisHashRowWriter
+      when 'json' then RedisJSONRowWriter
+      else
+        raise ParameterError, "unsupported Redis encode: #{encode.inspect}"
+      end
+    end
+
+    def initialize(client, prefix, key_columns)
+      @client = client
+      @prefix = prefix
+      @key_columns = key_columns
+    end
+
+    attr_reader :prefix
+    attr_reader :write_count
+
+    def key(row)
+      @prefix + @key_columns.map {|k| row[k] }.join('_')
+    end
+
+    def value_columns(row)
+      r = row.dup
+      @key_columns.each do |key|
+        r.delete(key)
+      end
+      r.empty? ? {1 => 1} : r
+    end
+
+    def pipelined(&block)
+      @client.pipelined(&block)
+    end
+
+    def write(row)
+      key = key(row)
+      futures = do_write(key, value_columns(row))
+      futures.push @client.expire(key, @expire) if @expire
+      futures
+    end
+
+    def expire
+      @client.expire(key, @expire)
+    end
+  end
+
+  class RedisHashRowWriter < RedisRowWriter
+    def do_write(key, values)
+      # set a value for each key:field pair
+      values.map {|field, value|
+        @client.hset(key, field, value)
+      }
+    end
+  end
+
+  class RedisJSONRowWriter < RedisRowWriter
+    def do_write(key, values)
+      future = @client.set(key, JSON.generate(values))
+      [future]
+    end
+  end
+
 end
