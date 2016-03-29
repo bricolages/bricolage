@@ -1,0 +1,11 @@
+create table dwh_jobs
+( dwh_job_seq bigint identity(1,1) encode delta
+, dwh_job_id varchar(120) encode lzo
+, job_class varchar(64) encode lzo
+, utc_start_time timestamp encode lzo
+, os_pid integer encode lzo
+, dwh_task_seq bigint encode lzo
+)
+distkey (dwh_job_seq)
+sortkey (dwh_job_seq)
+;

@@ -36,7 +36,12 @@ module Bricolage
     end
 
     def query_value(query)
-      execute_query(query) {|rs| rs.to_a.first.to_a.first[1] }
+      row = query_row(query)
+      row ? row.values.first : nil
+    end
+
+    def query_row(query)
+      execute_query(query) {|rs| rs.to_a.first }
     end
 
     def execute_query(query, &block)

@@ -1,0 +1,9 @@
+create table dwh_job_results
+( dwh_job_seq bigint encode delta
+, utc_end_time timestamp encode lzo
+, status varchar(16) encode lzo
+, message varchar(1000) encode lzo
+)
+distkey (dwh_job_seq)
+sortkey (dwh_job_seq)
+;

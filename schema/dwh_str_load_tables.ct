@@ -1,0 +1,10 @@
+create table dwh_str_load_tables
+( schema_name varchar(255) encode lzo
+, table_name varchar(255) encode lzo
+, initialized boolean encode raw
+, disabled boolean encode raw
+, load_interval integer encode lzo
+, buffer_size_max integer encode lzo
+)
+sortkey (table_name, schema_name)
+;

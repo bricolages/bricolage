@@ -1,9 +1,0 @@
-create table dwh_process_results
-( dwh_proc_seq bigint encode delta
-, utc_end_time timestamp encode lzo
-, status varchar(16) encode lzo
-, message varchar(1000) encode lzo
-)
-distkey (dwh_proc_seq)
-sortkey (dwh_proc_seq)
-;
