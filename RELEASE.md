@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.0
+
+- [CHANGE][EXPERIMENTAL] streaming_load: Always reuse same temporary log table xxxx_l_wk instead of temporary xxxx_l_tmpNNNN.  This *might* cause Redshift DDL slow down, I try to reduce the number of drop-create.
+
 ## version 5.15.2
 
 - [fix] redis-export: remove un-required error check.
