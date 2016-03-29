@@ -261,21 +261,13 @@ class StreamingLoadJobClass < RubyJobClass
 
     def create_tmp_log_table(conn, log_url)
       target_table = log_table_wk
-      execute_update conn, "create table #{target_table} (like #{@log_table});"
+      execute_update conn, "truncate #{target_table};"
       execute_update conn, load_log_copy_stmt(target_table, log_url, @src.credential_string)
-      begin
-        yield target_table
-      ensure
-        begin
-          execute_update conn, "drop table #{target_table}"
-        rescue PostgreSQLException => ex
-          @logger.error ex.message + " (ignored)"
-        end
-      end
+      yield target_table
     end
 
     def log_table_wk
-      "#{@log_table}_tmp#{Process.pid}"
+      "#{@log_table}_wk"
     end
 
     def load_log_copy_stmt(target_table, log_url, credential_string)
