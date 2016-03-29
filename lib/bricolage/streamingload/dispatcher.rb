@@ -1,5 +1,5 @@
 require 'bricolage/streamingload/eventqueue'
-require 'bricolage/streamingload/loadbuffer'
+require 'bricolage/streamingload/objectbuffer'
 require 'bricolage/streamingload/loadqueue'
 require 'bricolage/streamingload/urlpatterns'
 require 'bricolage/streamingload/sqswrapper'
@@ -38,7 +38,7 @@ module Bricolage
           logger: ctx.logger
         )
 
-        load_buffer = LoadBufferSet.new(
+        obj_buffer = ObjectBuffer.new(
           load_queue: load_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
           buffer_size_max: 3,
@@ -49,7 +49,7 @@ module Bricolage
 
         dispatcher = Dispatcher.new(
           event_queue: event_queue,
-          load_buffer: load_buffer,
+          object_buffer: object_buffer,
           url_patterns: url_patterns,
           logger: ctx.logger
         )
@@ -58,9 +58,9 @@ module Bricolage
         dispatcher.event_loop
       end
 
-      def initialize(event_queue:, load_buffer:, url_patterns:, logger:)
+      def initialize(event_queue:, object_buffer:, url_patterns:, logger:)
         @event_queue = event_queue
-        @bufs = load_buffer
+        @object_buffer = object_buffer
         @url_patterns = url_patterns
         @logger = logger
         @goto_terminate = false
@@ -115,7 +115,7 @@ module Bricolage
           return
         end
         obj = e.loadable_object(@url_patterns)
-        buf = @bufs[obj.qualified_name]
+        buf = @object_buffer[obj.qualified_name]
         if buf.empty?
           set_flush_timer obj.qualified_name, buf.load_interval, obj.url
         end
@@ -131,7 +131,7 @@ module Bricolage
       end
 
       def handle_flush(e)
-        load_task = @bufs[e.table_name].flush_if(head_url: e.head_url)
+        load_task = @object_buffer[e.table_name].flush_if(head_url: e.head_url)
         delete_events(load_task.source_events) if load_task
         @event_queue.delete(e)
       end

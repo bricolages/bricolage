@@ -32,7 +32,7 @@ module Bricolage
     end
 
 
-    class LoadBufferSet
+    class ObjectBuffer
 
       def initialize(load_queue:, data_source:, buffer_size_max: 500, logger:)
         @load_queue = load_queue
@@ -43,7 +43,7 @@ module Bricolage
       end
 
       def [](key)
-        (@buffers[key] ||= LoadBuffer.new(
+        (@buffers[key] ||= TableObjectBuffer.new(
           key,
           load_queue: @load_queue,
           data_source: @ds,
@@ -55,7 +55,7 @@ module Bricolage
     end
 
 
-    class LoadBuffer
+    class TableObjectBuffer
 
       def initialize(qualified_name, load_queue:, data_source:, buffer_size_max: 500, logger:)
         @qualified_name = qualified_name
