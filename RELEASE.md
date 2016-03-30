@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.1
+
+- [fix] Fixes MySQL data source syntax error
+
 ## version 5.16.0
 
 - [CHANGE][EXPERIMENTAL] streaming_load: Always reuse same temporary log table xxxx_l_wk instead of temporary xxxx_l_tmpNNNN.  This *might* cause Redshift DDL slow down, I try to reduce the number of drop-create.
