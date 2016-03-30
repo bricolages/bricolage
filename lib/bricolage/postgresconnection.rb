@@ -40,6 +40,10 @@ module Bricolage
       row ? row.values.first : nil
     end
 
+    def query_values(query)
+      execute_query(query) {|rs| rs.to_a }.flat_map {|rec| rec.values }
+    end
+
     def query_row(query)
       execute_query(query) {|rs| rs.to_a.first }
     end

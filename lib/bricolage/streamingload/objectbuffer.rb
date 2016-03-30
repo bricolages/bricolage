@@ -1,4 +1,5 @@
 require 'bricolage/streamingload/loadqueue'
+require 'bricolage/sqlutils'
 require 'json'
 require 'securerandom'
 require 'forwardable'
@@ -57,6 +58,8 @@ module Bricolage
 
     class TableObjectBuffer
 
+      include SQLUtils
+
       def initialize(qualified_name, load_queue:, data_source:, buffer_size_max: 500, logger:)
         @qualified_name = qualified_name
         @load_queue = load_queue
@@ -114,6 +117,8 @@ module Bricolage
         # FIXME: load table property from the parameter table
         600
       end
+
+      private
 
       def write_task_payload(task)
         @ds.open {|conn|
@@ -175,16 +180,6 @@ module Bricolage
                 )
             ;
         EndSQL
-      end
-
-      def sql_string_literal(s)
-        %Q('#{escape_sql_string s}')
-      end
-
-      alias s sql_string_literal
-
-      def escape_sql_string(s)
-        s.gsub(/'/, "''")
       end
 
     end
