@@ -2,7 +2,7 @@
 
 ## version 5.16.1
 
-- [fix] Fixes MySQL data source syntax error
+- [fix] Fixes syntax error on ruby 2.1
 
 ## version 5.16.0
 
