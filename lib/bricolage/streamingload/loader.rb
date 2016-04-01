@@ -19,31 +19,26 @@ require 'pry'
         config_path, task_id = opts.parse
 
         config = YAML.load(File.read(config_path))
-
         ctx = Context.for_application('.')
         loader = new(
           context: ctx,
           data_source: ctx.get_data_source('sql', config['redshift-ds']),
-          ctl_bucket: ctx.get_data_source('s3', config['s3-ds']),
           logger: ctx.logger
         )
         loader.execute_task task_id
       end
 
-      def initialize(context:, data_source:, ctl_bucket:, logger:)
+      def initialize(context:, data_source:, logger:)
         @ctx = context
         @ds = data_source
-        @ctl_bucket = ctl_bucket
         @logger = logger
       end
 
       def execute_task(task_id)
-        @ds.open {|conn|
-          task = LoadTask.load(conn, task_id)
-          params = LoaderParams.load(@ctx, task)
-          loader = Loader.new(@ctx, conn, ctl_bucket: @ctl_bucket, logger: @ctx.logger)
-          loader.process(task, params)
-        }
+        task = @ds.open {|conn| LoadTask.load(conn, task_id) }
+        params = LoaderParams.load(@ctx, task)
+        loader = Loader.new(@ctx, logger: @ctx.logger)
+        loader.process(task, params)
       end
 
     end
@@ -169,6 +164,14 @@ require 'pry'
         @params = job.params
       end
 
+      def ds
+        @params['redshift-ds']
+      end
+
+      def ctl_bucket
+        @params['ctl-ds']
+      end
+
       def enable_work_table?
         !!@params['work-table']
       end
@@ -207,6 +210,8 @@ require 'pry'
             optional: true, default: DEFAULT_LOAD_OPTIONS,
             value_handler: lambda {|value, ctx, vars| PSQLLoadOptions.parse(value) })
         params.add SQLFileParam.new('sql-file', 'PATH', 'SQL to insert rows from the work table to the target table.', optional: true)
+        params.add DataSourceParam.new('sql', 'redshift-ds', 'Target data source.')
+        params.add DataSourceParam.new('s3', 'ctl-ds', 'Manifest file data source.')
       end
 
       def self.default_load_options
@@ -248,10 +253,8 @@ require 'pry'
 
       include SQLUtils
 
-      def initialize(ctx, conn, ctl_bucket:, logger:)
+      def initialize(ctx, logger:)
         @ctx = ctx
-        @connection = conn
-        @ctl_bucket = ctl_bucket
         @logger = logger
 
         @job_id = SecureRandom.uuid
@@ -261,41 +264,14 @@ require 'pry'
       end
 
       def process(task, params)
-        assign_task task
-        begin
-          staged_files = stage_files(task)
-          return if staged_files.empty?
-          ManifestFile.create(
-            @ctl_bucket,
-            job_id: @job_id,
-            object_urls: staged_files,
-            logger: @logger
-          ) {|manifest|
-            if params.enable_work_table?
-              prepare_work_table params.work_table
-              load_objects params.work_table, manifest, params.load_options_string
-              @connection.transaction {
-                commit_work_table params
-                commit_job_result
-              }
-            else
-              @connection.transaction {
-                load_objects params.dest_table, manifest, params.load_options_string
-                commit_job_result
-              }
-            end
-          }
-        rescue JobFailure => ex
-          abort_job 'failure', ex.message
-          raise
-        rescue Exception => ex
-          abort_job 'error', ex.message
-          raise
-        end
+        params.ds.open {|conn|
+          @connection = conn
+          assign_task task
+          do_load task, params
+        }
       end
 
       def assign_task(task)
-        success = true
         @connection.transaction {
           @connection.lock('dwh_tasks')
           @connection.lock('dwh_jobs')
@@ -306,16 +282,40 @@ require 'pry'
           write_job(task.seq)
           @job_seq = read_job_seq(@job_id)
           @logger.info "dwh_job_seq=#{@job_seq}"
-          if processed
-            abort_job 'failure', "task is already processed by other jobs"
-            success = false
-          end
-          if table_in_use
-            abort_job 'failure', "other jobs are working on the target table"
-            success = false
+          abort_job 'failure', "task is already processed by other jobs" if processed
+          abort_job 'failure', "other jobs are working on the target table" if table_in_use
+        }
+      end
+
+      def do_load(task, params)
+        staged_files = stage_files(task)
+        return if staged_files.empty?
+        ManifestFile.create(
+          params.ctl_bucket,
+          job_id: @job_id,
+          object_urls: staged_files,
+          logger: @logger
+        ) {|manifest|
+          if params.enable_work_table?
+            prepare_work_table params.work_table
+            load_objects params.work_table, manifest, params.load_options_string
+            @connection.transaction {
+              commit_work_table params
+              commit_job_result
+            }
+          else
+            @connection.transaction {
+              load_objects params.dest_table, manifest, params.load_options_string
+              commit_job_result
+            }
           end
         }
-        raise JobFailure, "could not assign task #{task.id} to the job" unless success
+      rescue JobFailure => ex
+        write_job_error 'failure', ex.message
+        raise
+      rescue Exception => ex
+        write_job_error 'error', ex.message
+        raise
       end
 
       def write_job(task_seq)
@@ -456,6 +456,11 @@ require 'pry'
       MAX_MESSAGE_LENGTH = 1000
 
       def abort_job(status, message)
+        write_job_error(status, message)
+        raise JobFailure, message
+      end
+
+      def write_job_error(status, message)
         @end_time = Time.now
         write_job_result status, message.lines.first.strip[0, MAX_MESSAGE_LENGTH]
       end
