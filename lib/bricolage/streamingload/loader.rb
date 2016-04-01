@@ -30,19 +30,30 @@ module Bricolage
       end
 
       def assign_task(task)
-        @connection.transaction {
+        success = true
+        @connection.transaction {|txn|
           @connection.lock('dwh_tasks')
           @connection.lock('dwh_jobs')
           @connection.lock('dwh_job_results')
 
-          processed = task_processed?(task)
+          already_processed = task_processed?(task)
           table_in_use = table_in_use?(task)
+
           write_job(task.seq)
           @job_seq = read_job_seq(@job_id)
           @logger.info "dwh_job_seq=#{@job_seq}"
-          abort_job 'failure', "task is already processed by other jobs" if processed
-          abort_job 'failure', "other jobs are working on the target table" if table_in_use
+
+          # These result record MUST be written in the same transaction.
+          # DO NOT raise exception here
+          if already_processed
+            write_job_error 'failure', "task is already processed by other jobs"
+            success = false
+          elsif table_in_use
+            write_job_error 'failure', "other jobs are working on the target table"
+            success = false
+          end
         }
+        raise JobFailure, "could not assign task: #{task.id}" unless success
       end
 
       def do_load(task, params)
@@ -212,11 +223,6 @@ module Bricolage
       end
 
       MAX_MESSAGE_LENGTH = 1000
-
-      def abort_job(status, message)
-        write_job_error(status, message)
-        raise JobFailure, message
-      end
 
       def write_job_error(status, message)
         @end_time = Time.now
