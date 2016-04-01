@@ -1,5 +1,6 @@
 require 'bricolage/streamingload/loadbuffer'
 require 'json'
+require 'time'
 
 module Bricolage
 
@@ -31,17 +32,21 @@ module Bricolage
       end
 
       def Event.parse_sqs_record(msg, rec)
+        time_str = rec['eventTime']
+        tm = time_str ? (Time.parse(time_str) rescue nil) : nil
         {
           message_id: msg.message_id,
           receipt_handle: msg.receipt_handle,
-          name: rec['eventName']
+          name: rec['eventName'],
+          time: tm
         }
       end
 
-      def initialize(message_id:, receipt_handle:, name:)
+      def initialize(message_id:, receipt_handle:, name:, time:)
         @message_id = message_id
         @receipt_handle = receipt_handle
         @name = name
+        @time = time
       end
 
       def event_id
@@ -51,6 +56,7 @@ module Bricolage
       attr_reader :message_id
       attr_reader :receipt_handle
       attr_reader :name
+      attr_reader :time
 
       def data?
         false
@@ -85,8 +91,8 @@ module Bricolage
         'flush'
       end
 
-      def initialize(message_id:, receipt_handle:, name:, table_name:, head_url:)
-        super message_id: message_id, receipt_handle: receipt_handle, name: name
+      def initialize(message_id:, receipt_handle:, name:, time:, table_name:, head_url:)
+        super message_id: message_id, receipt_handle: receipt_handle, name: name, time: time
         @table_name = table_name
         @head_url = head_url
       end
@@ -108,8 +114,8 @@ module Bricolage
         }
       end
 
-      def initialize(message_id:, receipt_handle:, name:, region:, bucket:, key:, size:)
-        super message_id: message_id, receipt_handle: receipt_handle, name: name
+      def initialize(message_id:, receipt_handle:, name:, time:, region:, bucket:, key:, size:)
+        super message_id: message_id, receipt_handle: receipt_handle, name: name, time: time
         @region = region
         @bucket = bucket
         @key = key

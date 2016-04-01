@@ -30,6 +30,10 @@ module Bricolage
         "#{schema_name}.#{table_name}"
       end
 
+      def event_time
+        @event.time
+      end
+
     end
 
 
@@ -139,12 +143,14 @@ module Bricolage
                 , dwh_task_class
                 , schema_name
                 , table_name
+                , utc_submit_time
                 )
             values
                 ( #{s task_id}
                 , #{s 'streaming_load_v3'}
                 , #{s schema}
                 , #{s table}
+                , getdate() :: timestamp
                 )
             ;
         EndSQL
@@ -176,7 +182,7 @@ module Bricolage
                 , #{s obj.url}
                 , #{s obj.message_id}
                 , #{s obj.receipt_handle}
-                , getdate() :: timestamp
+                , #{t obj.event_time}
                 )
             ;
         EndSQL

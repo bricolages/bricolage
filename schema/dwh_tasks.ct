@@ -4,6 +4,7 @@ create table dwh_tasks
 , dwh_task_class varchar(64) encode lzo
 , schema_name varchar(255) encode lzo
 , table_name varchar(255) encode lzo
+, utc_submit_time timestamp encode lzo
 )
 distkey (dwh_task_seq)
 sortkey (dwh_task_seq)

@@ -1,5 +1,6 @@
 require 'bricolage/streamingload/event'
 require 'json'
+require 'time'
 
 module Bricolage
 
@@ -21,12 +22,13 @@ module Bricolage
         @table_name = table_name
         @delay_seconds = sec
         @head_url = head_url
+        @time = Time.now.getutc
       end
 
       attr_reader :delay_seconds
 
       def body
-        { 'eventName' => 'flush', 'tableName' => @table_name, 'headUrl' => @head_url }
+        { 'eventName' => 'flush', 'eventTime' => @time.iso8601, 'tableName' => @table_name, 'headUrl' => @head_url }
       end
     end
 
