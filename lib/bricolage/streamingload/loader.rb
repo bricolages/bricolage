@@ -1,25 +1,28 @@
 require 'bricolage/sqlutils'
 require 'bricolage/exception'
+require 'bricolage/version'
 require 'securerandom'
 require 'json'
 require 'forwardable'
+require 'optparse'
 
 module Bricolage
 
   module StreamingLoad
 
-    class Loader
+    class LoaderService
 
-      def Loader.main
+      def LoaderService.main
 require 'pp'
 require 'pry'
-        config_path, task_id = ARGV
+        opts = LoaderServiceOptions.new(ARGV)
+        config_path, task_id = opts.parse
 
         config = YAML.load(File.read(config_path))
-pp config
 
         ctx = Context.for_application('.')
         loader = new(
+          context: ctx,
           data_source: ctx.get_data_source('sql', config['redshift-ds']),
           ctl_bucket: ctx.get_data_source('s3', config['s3-ds']),
           logger: ctx.logger
@@ -27,33 +30,229 @@ pp config
         loader.execute_task task_id
       end
 
-      def initialize(data_source:, ctl_bucket:, logger:)
+      def initialize(context:, data_source:, ctl_bucket:, logger:)
+        @ctx = context
         @ds = data_source
         @ctl_bucket = ctl_bucket
         @logger = logger
-
-        @noop = false
       end
 
       def execute_task(task_id)
-        LoaderConnection.open(@ds, logger: @logger, noop: @noop) {|conn|
-          job = LoadJob.new(conn, ctl_bucket: @ctl_bucket, logger: @logger)
-          job.process(task_id)
+        @ds.open {|conn|
+          task = LoadTask.load(conn, task_id)
+          params = LoaderParams.load(@ctx, task)
+          loader = Loader.new(@ctx, conn, ctl_bucket: @ctl_bucket, logger: @ctx.logger)
+          loader.process(task, params)
         }
       end
 
     end
 
 
-    class LoadJob
+    class LoaderServiceOptions
+
+      def initialize(argv)
+        @argv = argv
+        @rest_arguments = nil
+        @opts = opts = OptionParser.new
+        opts.on('--task-id=ID', 'Execute oneshot load task (implicitly disables daemon mode).') {|task_id|
+          @task_id = task_id
+        }
+        opts.on('--help', 'Prints this message and quit.') {
+          puts opts.help
+          exit 0
+        }
+        opts.on('--version', 'Prints version and quit.') {
+          puts "#{File.basename($0)} version #{VERSION}"
+          exit 0
+        }
+      end
+
+      attr_reader :task_id
+      attr_reader :rest_arguments
+
+      def parse
+        @opts.parse!(@argv)
+        @rest_arguments = @argv.dup
+      rescue OptionParser::ParseError => err
+        raise OptionError, err.message
+      end
+
+    end
+
+
+    class LoadTask
+
+      def LoadTask.load(conn, task_id)
+        rec = conn.query_row(<<-EndSQL)
+          select
+              t.dwh_task_seq
+              , t.dwh_task_class
+              , t.schema_name
+              , t.table_name
+              , prm.initialized
+              , prm.disabled
+          from
+              dwh_tasks t
+              left outer join dwh_str_load_tables prm using (schema_name, table_name)
+          where
+              t.dwh_task_id = '#{task_id}'
+          ;
+        EndSQL
+        new(
+          task_id: task_id,
+          task_seq: rec['dwh_task_seq'],
+          task_class: rec['dwh_task_class'],
+          schema: rec['schema_name'],
+          table: rec['table_name'],
+          initialized: rec['initialized'],
+          disabled: rec['disabled']
+        )
+      end
+
+      def initialize(task_id:, task_seq:, task_class:,
+          schema:, table:, initialized:, disabled:)
+        @id = task_id
+        @seq = task_seq
+        @class = task_class
+        @schema = schema
+        @table = table
+        @initialized = initialized
+        @disabled = disabled
+      end
+
+      attr_reader :id
+      attr_reader :seq
+      attr_reader :schema
+      attr_reader :table
+
+      def initialized?
+        @initialized
+      end
+
+      def disabled?
+        @disabled
+      end
+
+    end
+
+
+    class LoaderParams
+
+      def LoaderParams.load(ctx, task)
+        job = load_job(ctx, task)
+        job.provide_default 'dest-table', "#{task.schema}.#{task.table}"
+        #job.provide_sql_file_by_job_id   # FIXME: provide only when exist
+        job.compile
+        new(job)
+      end
+
+      def LoaderParams.load_job(ctx, task)
+        if job_file = find_job_file(ctx, task)
+          ctx.logger.debug "using .job file: #{job_file}"
+          Job.load_file(job_file, ctx.subsystem(task.schema))
+        else
+          ctx.logger.debug "using default job parameters (no .job file)"
+          Job.instantiate(task.table, 'streaming_load_v3', ctx).tap {|job|
+            job.bind_parameters({})
+          }
+        end
+      end
+
+      def LoaderParams.find_job_file(ctx, task)
+        paths = Dir.glob("#{ctx.home_path}/#{task.schema}/#{task.table}.*")
+        paths.select {|path| File.extname(path) == '.job' }.sort.first
+      end
+
+      def initialize(job)
+        @job = job
+        @params = job.params
+      end
+
+      def enable_work_table?
+        !!@params['work-table']
+      end
+
+      def work_table
+        @params['work-table']
+      end
+
+      def dest_table
+        @params['dest-table']
+      end
+
+      def load_options_string
+        @params['load-options'].to_s
+      end
+
+      def sql_source
+        sql = @params['sql-file']
+        sql ? sql.source : "insert into #{dest_table} select * from #{work_table};"
+      end
+
+    end
+
+
+    require 'bricolage/rubyjobclass'
+    require 'bricolage/psqldatasource'
+
+    class LoaderJob < RubyJobClass
+
+      job_class_id 'streaming_load_v3'
+
+      def self.parameters(params)
+        params.add DestTableParam.new(optional: false)
+        params.add DestTableParam.new('work-table', optional: true)
+        params.add KeyValuePairsParam.new('load-options', 'OPTIONS', 'Loader options.',
+            optional: true, default: DEFAULT_LOAD_OPTIONS,
+            value_handler: lambda {|value, ctx, vars| PSQLLoadOptions.parse(value) })
+        params.add SQLFileParam.new('sql-file', 'PATH', 'SQL to insert rows from the work table to the target table.', optional: true)
+      end
+
+      def self.default_load_options
+      end
+
+      # Use loosen options by default
+      default_options = [
+        ['json', 'auto'],
+        ['gzip', true],
+        ['timeformat', 'auto'],
+        ['dateformat', 'auto'],
+        ['acceptanydate', true],
+        ['acceptinvchars', ' '],
+        ['truncatecolumns', true],
+        ['trimblanks', true]
+      ]
+      opts = default_options.map {|name, value| PSQLLoadOptions::Option.new(name, value) }
+      DEFAULT_LOAD_OPTIONS = PSQLLoadOptions.new(opts)
+
+      def self.declarations(params)
+        Bricolage::Declarations.new(
+          'dest_table' => nil,
+          'work_table' => nil
+        )
+      end
+
+      def initialize(params)
+        @params = params
+      end
+
+      def bind(ctx, vars)
+        @params['sql-file'].bind(ctx, vars) if @params['sql-file']
+      end
+
+    end
+
+
+    class Loader
 
       include SQLUtils
 
-      def initialize(connection, ctl_bucket:, logger:, noop: false)
-        @connection = connection
+      def initialize(ctx, conn, ctl_bucket:, logger:)
+        @ctx = ctx
+        @connection = conn
         @ctl_bucket = ctl_bucket
         @logger = logger
-        @noop = noop
 
         @job_id = SecureRandom.uuid
         @job_seq = nil
@@ -61,10 +260,7 @@ pp config
         @end_time = nil
       end
 
-      attr_reader :sql
-
-      def process(task_id)
-        task = LoadTask.load(@connection, task_id)
+      def process(task, params)
         assign_task task
         begin
           staged_files = stage_files(task)
@@ -73,19 +269,18 @@ pp config
             @ctl_bucket,
             job_id: @job_id,
             object_urls: staged_files,
-            logger: @logger,
-            noop: @noop
+            logger: @logger
           ) {|manifest|
-load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvchars ' ')    # FIXME: read from table
-            if task.use_work_table?
-              load_objects task.work_table, manifest, load_options
+            if params.enable_work_table?
+              prepare_work_table params.work_table
+              load_objects params.work_table, manifest, params.load_options_string
               @connection.transaction {
-                commit_work_table task
+                commit_work_table params
                 commit_job_result
               }
             else
               @connection.transaction {
-                load_objects task.dest_table, manifest, load_options
+                load_objects params.dest_table, manifest, params.load_options_string
                 commit_job_result
               }
             end
@@ -108,7 +303,7 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
 
           processed = task_processed?(task)
           table_in_use = table_in_use?(task)
-          write_job(task.task_seq)
+          write_job(task.seq)
           @job_seq = read_job_seq(@job_id)
           @logger.info "dwh_job_seq=#{@job_seq}"
           if processed
@@ -120,7 +315,7 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
             success = false
           end
         }
-        raise JobFailure, "could not assign task #{task.task_id} to the job" unless success
+        raise JobFailure, "could not assign task #{task.id} to the job" unless success
       end
 
       def write_job(task_seq)
@@ -129,7 +324,7 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
                 ( dwh_job_id
                 , job_class
                 , utc_start_time
-                , os_pid
+                , process_id
                 , dwh_task_seq
                 )
             values
@@ -161,7 +356,7 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
                 inner join dwh_jobs j using (dwh_task_seq)
                 left outer join dwh_job_results r using (dwh_job_seq)
             where
-                t.dwh_task_seq = #{task.task_seq}
+                t.dwh_task_seq = #{task.seq}
                 and (
                     r.status is null         -- running
                     or r.status = 'success'  -- finished with success
@@ -203,7 +398,7 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
             from
                 dwh_str_load_files_incoming
             where
-                dwh_task_seq = #{task.task_seq}
+                dwh_task_seq = #{task.seq}
                 and object_url not in (
                     select
                         f.object_url
@@ -230,6 +425,10 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
         staged_files
       end
 
+      def prepare_work_table(work_table)
+        @connection.execute("truncate #{work_table}")
+      end
+
       def load_objects(dest_table, manifest, options)
         @connection.execute(<<-EndSQL.strip.gsub(/\s+/, ' '))
             copy #{dest_table}
@@ -241,12 +440,11 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
             #{options}
             ;
         EndSQL
-        @logger.info "load succeeded: #{manifest.url}" unless @noop
+        @logger.info "load succeeded: #{manifest.url}"
       end
 
-      def commit_work_table(task)
-        insert_stmt = @sql ? @sql.source : "insert into #{task.dest_table} select * from #{task.work_table};"
-        @connection.execute(insert_stmt)
+      def commit_work_table(params)
+        @connection.execute(params.sql_source)
         # keep work table records for later tracking
       end
 
@@ -283,107 +481,18 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
     end
 
 
-    class LoadTask
-
-      def LoadTask.load(conn, task_id)
-        rec = conn.query_row(<<-EndSQL)
-          select *
-          from dwh_tasks
-          where dwh_task_id = '#{task_id}'
-          ;
-        EndSQL
-        new(
-          conn,
-          task_seq: rec['dwh_task_seq'],
-          task_id: rec['dwh_task_id'],
-          task_class: rec['dwh_task_class'],
-          schema: rec['schema_name'],
-          table: rec['table_name']
-        )
-      end
-
-      def initialize(conn, task_seq:, task_id:, task_class:, schema:, table:)
-        @connection = conn
-        @task_seq = task_seq
-        @task_id = task_id
-        @task_class = task_class
-        @schema = schema
-        @table = table
-      end
-
-      attr_reader :task_seq
-      attr_reader :task_id
-      attr_reader :schema
-      attr_reader :table
-
-      def dest_table
-        "#{@schema}.#{@table}"
-      end
-
-      def work_table
-        "#{@schema}.#{@table}_wk"
-      end
-
-      def use_work_table?
-        true    # FIXME
-      end
-
-    end
-
-
-    class LoaderConnection
-
-      extend Forwardable
-
-      def LoaderConnection.open(ds, logger:, noop: false)
-        ds.open {|conn|
-          yield new(ds, conn, logger: logger, noop: noop)
-        }
-      end
-
-      def initialize(ds, conn, logger:, noop: false)
-        @ds = ds
-        @connection = conn
-        @logger = logger
-        @noop = noop
-      end
-
-      def_delegator '@connection', :transaction
-      def_delegator '@connection', :query
-      def_delegator '@connection', :query_row
-      def_delegator '@connection', :query_value
-      def_delegator '@connection', :query_values
-
-      def execute(query)
-        if @noop
-          @connection.log_query(query)
-        else
-          @connection.update(query)
-        end
-      end
-
-      def lock(table)
-        execute("lock #{table}")
-      end
-
-    end
-
-
     class ManifestFile
 
-      def ManifestFile.create(ds, job_id:, object_urls:, logger:, noop: false)
-        manifest = new(ds, job_id, object_urls, noop: noop)
-        logger.info "s3: put: #{manifest.url}"
-        manifest.put
-        yield manifest
-#logger.info "s3: delete: #{manifest.url}"
-#manifest.delete
+      def ManifestFile.create(ds, job_id:, object_urls:, logger:, noop: false, &block)
+        manifest = new(ds, job_id, object_urls, logger: logger, noop: noop)
+        manifest.create_temporary(&block)
       end
 
-      def initialize(ds, job_id, object_urls, noop: false)
+      def initialize(ds, job_id, object_urls, logger:, noop: false)
         @ds = ds
         @job_id = job_id
         @object_urls = object_urls
+        @logger = logger
         @noop = noop
       end
 
@@ -410,11 +519,19 @@ load_options = %q(json 'auto' gzip timeformat 'auto' truncatecolumns acceptinvch
       end
 
       def put
+        @logger.info "s3: put: #{url}"
         @ds.object(name).put(body: content) unless @noop
       end
 
       def delete
+        @logger.info "s3: delete: #{url}"
         @ds.object(name).delete unless @noop
+      end
+
+      def create_temporary
+        put
+        yield self
+        delete
       end
 
     end

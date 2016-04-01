@@ -108,11 +108,13 @@ module Bricolage
       @script.bind @context, @variables
     end
 
+    def provide_default(name, value)
+      @param_vals[name] ||= value if @param_vals
+    end
+
     # Called from jobclasses (parameters_filter)
     def provide_sql_file_by_job_id
-      if @param_vals and @id
-        @param_vals['sql-file'] ||= @id
-      end
+      provide_default 'sql-file', @id if @id
     end
 
     def declarations

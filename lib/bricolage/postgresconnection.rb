@@ -92,8 +92,40 @@ module Bricolage
 
     def transaction
       execute 'begin transaction'
-      yield
-      execute 'commit'
+      txn = Transaction.new(self)
+      begin
+        yield txn
+      rescue
+        begin
+          txn.abort unless txn.committed?
+        rescue => ex
+          @logger.error "SQL error on transaction abort: #{ex.message} (ignored)"
+        end
+        raise
+      ensure
+        txn.commit unless txn.committed?
+      end
+    end
+
+    class Transaction
+      def initialize(conn)
+        @conn = conn
+        @committed = false
+      end
+
+      def committed?
+        @committed
+      end
+
+      def commit
+        @conn.execute 'commit'
+        @committed = true
+      end
+
+      def abort
+        @conn.execute 'abort'
+        @committed = true
+      end
     end
 
     def open_cursor(query, name = nil, &block)
@@ -153,6 +185,10 @@ module Bricolage
 
     def analyze(table)
       execute "analyze #{table};"
+    end
+
+    def lock(table)
+      execute("lock #{table}")
     end
 
     def log_query(query)
