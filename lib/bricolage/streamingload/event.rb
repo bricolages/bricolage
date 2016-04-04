@@ -1,19 +1,10 @@
-require 'json'
-require 'time'
+require 'bricolage/sqsdatasource'
 
 module Bricolage
 
   module StreamingLoad
 
-    class Event
-
-      def Event.for_sqs_result(result)
-        result.messages.flat_map {|msg|
-          body = JSON.parse(msg.body)
-          records = body['Records'] or next []
-          records.map {|rec| get_concrete_class(msg, rec).for_sqs_record(msg, rec) }
-        }
-      end
+    class Event < SQSMessage
 
       def Event.get_concrete_class(msg, rec)
         case
@@ -26,36 +17,9 @@ module Bricolage
         end
       end
 
-      def Event.for_sqs_record(msg, rec)
-        new(** Event.parse_sqs_record(msg, rec).merge(parse_sqs_record(msg, rec)))
-      end
-
-      def Event.parse_sqs_record(msg, rec)
-        time_str = rec['eventTime']
-        tm = time_str ? (Time.parse(time_str) rescue nil) : nil
-        {
-          message_id: msg.message_id,
-          receipt_handle: msg.receipt_handle,
-          name: rec['eventName'],
-          time: tm
-        }
-      end
-
-      def initialize(message_id:, receipt_handle:, name:, time:)
-        @message_id = message_id
-        @receipt_handle = receipt_handle
-        @name = name
-        @time = time
-      end
-
       def event_id
         raise "#{self.class}\#event_id must be implemented"
       end
-
-      attr_reader :message_id
-      attr_reader :receipt_handle
-      attr_reader :name
-      attr_reader :time
 
       def data?
         false
@@ -66,6 +30,10 @@ module Bricolage
 
     class ShutdownEvent < Event
 
+      def ShutdownEvent.create
+        super name: 'shutdown', table_name: table_name, head_url: head_url
+      end
+
       def ShutdownEvent.parse_sqs_record(msg, rec)
         {}
       end
@@ -74,10 +42,22 @@ module Bricolage
         'shutdown'
       end
 
+      def init_message(table_name:, head_url:)
+        @table_name = table_name
+        @head_url = head_url
+      end
+
+      attr_reader :table_name
+      attr_reader :head_url
+
     end
 
 
     class FlushEvent < Event
+
+      def FlushEvent.create(table_name:, head_url:, delay_seconds:)
+        super name: 'flush', table_name: table_name, head_url: head_url, delay_seconds: delay_seconds
+      end
 
       def FlushEvent.parse_sqs_record(msg, rec)
         {
@@ -90,8 +70,7 @@ module Bricolage
         'flush'
       end
 
-      def initialize(message_id:, receipt_handle:, name:, time:, table_name:, head_url:)
-        super message_id: message_id, receipt_handle: receipt_handle, name: name, time: time
+      def init_message(table_name:, head_url:)
         @table_name = table_name
         @head_url = head_url
       end
@@ -113,16 +92,15 @@ module Bricolage
         }
       end
 
-      def initialize(message_id:, receipt_handle:, name:, time:, region:, bucket:, key:, size:)
-        super message_id: message_id, receipt_handle: receipt_handle, name: name, time: time
+      def event_id
+        'data'
+      end
+
+      def init_message(region:, bucket:, key:, size:)
         @region = region
         @bucket = bucket
         @key = key
         @size = size
-      end
-
-      def event_id
-        'data'
       end
 
       attr_reader :region

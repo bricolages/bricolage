@@ -1,6 +1,6 @@
-require 'bricolage/streamingload/eventqueue'
+require 'bricolage/sqsdatasource'
+require 'bricolage/streamingload/event'
 require 'bricolage/streamingload/objectbuffer'
-require 'bricolage/streamingload/loadqueue'
 require 'bricolage/streamingload/urlpatterns'
 require 'bricolage/streamingload/sqswrapper'
 require 'aws-sdk'
@@ -22,24 +22,11 @@ module Bricolage
 
         ctx = Context.for_application('.')
 
-        sqs_client = SQSClientWrapper.new(Aws::SQS::Client.new)
-        dummy_client = SQSClientWrapper.new(DummySQSClient.new)
-
-        event_queue = EventQueue.new(
-          sqs: sqs_client,
-          sqs_url: config['event_queue']['sqs_url'],
-          visibility_timeout: config['event_queue']['visibility_timeout'],
-          logger: ctx.logger
-        )
-
-        load_queue = LoadQueue.new(
-          sqs: dummy_client,   #sqs_client,
-          sqs_url: config['load_queue']['sqs_url'],
-          logger: ctx.logger
-        )
+        event_queue = ctx.get_data_source('sqs', config['event-queue'])
+        task_queue = ctx.get_data_source('sqs', config['task-queue'])
 
         obj_buffer = ObjectBuffer.new(
-          load_queue: load_queue,
+          task_queue: task_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
           buffer_size_max: 3,
           logger: ctx.logger
@@ -63,55 +50,25 @@ module Bricolage
         @object_buffer = object_buffer
         @url_patterns = url_patterns
         @logger = logger
-        @goto_terminate = false
       end
 
       def main
-        #trap_signals
         #daemon
         event_loop
       end
 
-      def trap_signals
-        # Allows graceful stop
-        Signal.trap(:TERM) {
-          @goto_terminate = true
-        }
-      end
-
       def event_loop
-        n_zero = 0
-        until @goto_terminate
-          sleep(2 ** n_zero) if n_zero > 0
-          n_msg = handle_events()
-          if n_msg == 0
-            n_zero += 1
-          else
-            n_zero = 0
-          end
-        end
-      end
-
-      def handle_events
-        n_msg = @event_queue.each do |e|
-          @logger.debug "handling event: #{e.name}"
-          mid = "handle_#{e.event_id}"
-          # just ignore unknown event to make app migration easy
-          if self.respond_to?(mid, true)
-            __send__(mid, e)
-          end
-        end
-        n_msg
+        @event_queue.main_handler_loop(handlers: self, message_class: Event)
       end
 
       def handle_shutdown(e)
-        @goto_terminate = true
-        @event_queue.delete(e)
+        @event_queue.initiate_terminate
+        @event_queue.delete_message(e)
       end
 
       def handle_data(e)
         unless e.created?
-          @event_queue.delete(e)
+          @event_queue.delete_message(e)
           return
         end
         obj = e.loadable_object(@url_patterns)
@@ -133,12 +90,12 @@ module Bricolage
       def handle_flush(e)
         load_task = @object_buffer[e.table_name].flush_if(head_url: e.head_url)
         delete_events(load_task.source_events) if load_task
-        @event_queue.delete(e)
+        @event_queue.delete_message(e)
       end
 
       def delete_events(events)
         events.each do |e|
-          @event_queue.delete(e)
+          @event_queue.delete_message(e)
         end
       end
 

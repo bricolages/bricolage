@@ -39,8 +39,8 @@ module Bricolage
 
     class ObjectBuffer
 
-      def initialize(load_queue:, data_source:, buffer_size_max: 500, logger:)
-        @load_queue = load_queue
+      def initialize(task_queue:, data_source:, buffer_size_max: 500, logger:)
+        @task_queue = task_queue
         @ds = data_source
         @buffer_size_max = buffer_size_max
         @logger = logger
@@ -50,7 +50,7 @@ module Bricolage
       def [](key)
         (@buffers[key] ||= TableObjectBuffer.new(
           key,
-          load_queue: @load_queue,
+          task_queue: @task_queue,
           data_source: @ds,
           buffer_size_max: @buffer_size_max,
           logger: @logger
@@ -64,9 +64,10 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(qualified_name, load_queue:, data_source:, buffer_size_max: 500, logger:)
+      def initialize(qualified_name, task_queue:, data_source:, buffer_size_max: 500, logger:)
         @qualified_name = qualified_name
-        @load_queue = load_queue
+        @schema, @table = qualified_name.split('.', 2)
+        @task_queue = task_queue
         @ds = data_source
         @buffer_size_max = buffer_size_max
         @logger = logger
@@ -110,9 +111,14 @@ module Bricolage
         return nil if objects.empty?
         @logger.debug "flush initiated: #{@qualified_name} task_id=#{@curr_task_id}"
         objects.freeze
-        task = LoadTask.new(task_id: @curr_task_id, objects: objects)
+        task = LoadTask.new(
+          task_id: @curr_task_id,
+          schema: @schema,
+          table: @table,
+          objects: objects
+        )
         write_task_payload task
-        @load_queue.put task
+        @task_queue.put task
         clear
         return task
       end
@@ -127,16 +133,15 @@ module Bricolage
       def write_task_payload(task)
         @ds.open {|conn|
           conn.transaction {
-            @dwh_task_seq = write_task(conn, @curr_task_id, @qualified_name)
+            task.seq = write_task(conn, task)
             task.objects.each do |obj|
-              write_task_file(conn, @dwh_task_seq, obj)
+              write_task_file(conn, task.seq, obj)
             end
           }
         }
       end
 
-      def write_task(conn, task_id, qualified_name)
-        schema, table = qualified_name.split('.', 2)
+      def write_task(conn, task)
         conn.update(<<-EndSQL)
             insert into dwh_tasks
                 ( dwh_task_id
@@ -146,10 +151,10 @@ module Bricolage
                 , utc_submit_time
                 )
             values
-                ( #{s task_id}
-                , #{s 'streaming_load_v3'}
-                , #{s schema}
-                , #{s table}
+                ( #{s task.id}
+                , #{s task.task_class}
+                , #{s task.schema}
+                , #{s task.table}
                 , getdate() :: timestamp
                 )
             ;

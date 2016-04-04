@@ -5,22 +5,23 @@ module Bricolage
   module StreamingLoad
 
     class SQSClientWrapper
-      def initialize(sqs)
+      def initialize(sqs, logger:)
         @sqs = sqs
+        @logger = logger
       end
 
       def receive_message(**args)
-        $stderr.puts "receive_message(#{args.inspect})"
+        @logger.debug "receive_message(#{args.inspect})"
         @sqs.receive_message(**args)
       end
 
       def send_message(**args)
-        $stderr.puts "send_message(#{args.inspect})"
+        @logger.debug "send_message(#{args.inspect})"
         @sqs.send_message(**args)
       end
 
       def delete_message(**args)
-        $stderr.puts "delete_message(#{args.inspect})"
+        @logger.debug "delete_message(#{args.inspect})"
         @sqs.delete_message(**args)
       end
     end

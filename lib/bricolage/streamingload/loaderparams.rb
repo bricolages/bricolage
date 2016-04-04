@@ -12,7 +12,7 @@ module Bricolage
         job.provide_default 'dest-table', "#{task.schema}.#{task.table}"
         #job.provide_sql_file_by_job_id   # FIXME: provide only when exist
         job.compile
-        new(job)
+        new(task, job)
       end
 
       def LoaderParams.load_job(ctx, task)
@@ -32,9 +32,26 @@ module Bricolage
         paths.select {|path| File.extname(path) == '.job' }.sort.first
       end
 
-      def initialize(job)
+      def initialize(task, job)
+        @task = task
         @job = job
         @params = job.params
+      end
+
+      def task_id
+        @task.id
+      end
+
+      def task_seq
+        @task.seq
+      end
+
+      def schema
+        @task.schema
+      end
+
+      def table
+        @task.table
       end
 
       def ds

@@ -1,3 +1,4 @@
+require 'bricolage/streamingload/loaderparams'
 require 'bricolage/streamingload/manifest'
 require 'bricolage/sqlutils'
 require 'securerandom'
@@ -11,8 +12,14 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(ctx, logger:)
+      def Loader.load_from_file(ctx, task, logger:)
+        params = LoaderParams.load(@ctx, task)
+        new(ctx, params, logger: logger)
+      end
+
+      def initialize(ctx, params, logger:)
         @ctx = ctx
+        @params = params
         @logger = logger
 
         @job_id = SecureRandom.uuid
@@ -21,25 +28,25 @@ module Bricolage
         @end_time = nil
       end
 
-      def process(task, params)
-        params.ds.open {|conn|
+      def execute
+        @params.ds.open {|conn|
           @connection = conn
-          assign_task task
-          do_load task, params
+          assign_task
+          do_load
         }
       end
 
-      def assign_task(task)
+      def assign_task
         success = true
         @connection.transaction {|txn|
           @connection.lock('dwh_tasks')
           @connection.lock('dwh_jobs')
           @connection.lock('dwh_job_results')
 
-          already_processed = task_processed?(task)
-          table_in_use = table_in_use?(task)
+          already_processed = task_processed?(@params.task_seq)
+          table_in_use = table_in_use?(@params.schema, @params.table)
 
-          write_job(task.seq)
+          write_job(@params.task_seq)
           @job_seq = read_job_seq(@job_id)
           @logger.info "dwh_job_seq=#{@job_seq}"
 
@@ -56,25 +63,25 @@ module Bricolage
         raise JobFailure, "could not assign task: #{task.id}" unless success
       end
 
-      def do_load(task, params)
-        staged_files = stage_files(task)
+      def do_load
+        staged_files = stage_files(@params.task_seq)
         return if staged_files.empty?
         ManifestFile.create(
-          params.ctl_bucket,
+          @params.ctl_bucket,
           job_id: @job_id,
           object_urls: staged_files,
           logger: @logger
         ) {|manifest|
-          if params.enable_work_table?
-            prepare_work_table params.work_table
-            load_objects params.work_table, manifest, params.load_options_string
+          if @params.enable_work_table?
+            prepare_work_table @params.work_table
+            load_objects @params.work_table, manifest, @params.load_options_string
             @connection.transaction {
-              commit_work_table params
+              commit_work_table @params
               commit_job_result
             }
           else
             @connection.transaction {
-              load_objects params.dest_table, manifest, params.load_options_string
+              load_objects @params.dest_table, manifest, @params.load_options_string
               commit_job_result
             }
           end
@@ -116,7 +123,7 @@ module Bricolage
         EndSQL
       end
 
-      def task_processed?(task)
+      def task_processed?(task_seq)
         n_nonerror_jobs = @connection.query_value(<<-EndSQL)
             select
                 count(*)
@@ -125,7 +132,7 @@ module Bricolage
                 inner join dwh_jobs j using (dwh_task_seq)
                 left outer join dwh_job_results r using (dwh_job_seq)
             where
-                t.dwh_task_seq = #{task.seq}
+                t.dwh_task_seq = #{task_seq}
                 and (
                     r.status is null         -- running
                     or r.status = 'success'  -- finished with success
@@ -136,7 +143,7 @@ module Bricolage
         n_nonerror_jobs.to_i > 0
       end
 
-      def table_in_use?(task)
+      def table_in_use?(schema, table)
         n_working_jobs = @connection.query_value(<<-EndSQL)
             select
                 count(*)
@@ -145,8 +152,8 @@ module Bricolage
                 inner join dwh_jobs j using (dwh_task_seq)
                 left outer join dwh_job_results r using (dwh_job_seq)
             where
-                t.schema_name = #{s task.schema}
-                and t.table_name = #{s task.table}
+                t.schema_name = #{s schema}
+                and t.table_name = #{s table}
                 and r.status is null   -- running
             ;
         EndSQL
@@ -154,7 +161,7 @@ module Bricolage
         n_working_jobs.to_i > 0
       end
 
-      def stage_files(task)
+      def stage_files(task_seq)
         # already-processed object_url MUST be removed
         @connection.execute(<<-EndSQL)
             insert into dwh_str_load_files
@@ -167,7 +174,7 @@ module Bricolage
             from
                 dwh_str_load_files_incoming
             where
-                dwh_task_seq = #{task.seq}
+                dwh_task_seq = #{task_seq}
                 and object_url not in (
                     select
                         f.object_url
