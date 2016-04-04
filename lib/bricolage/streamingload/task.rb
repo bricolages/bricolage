@@ -97,6 +97,10 @@ module Bricolage
       attr_reader :schema
       attr_reader :table
 
+      def qualified_name
+        "#{@schema}.#{@table}"
+      end
+
       #
       # For writer
       #

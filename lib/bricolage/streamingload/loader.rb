@@ -13,7 +13,7 @@ module Bricolage
       include SQLUtils
 
       def Loader.load_from_file(ctx, task, logger:)
-        params = LoaderParams.load(@ctx, task)
+        params = LoaderParams.load(ctx, task)
         new(ctx, params, logger: logger)
       end
 

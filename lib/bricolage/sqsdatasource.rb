@@ -10,12 +10,15 @@ module Bricolage
 
     declare_type 'sqs'
 
-    def initialize(region: 'ap-northeast-1', url:, access_key_id:, secret_access_key:, visibility_timeout:, noop: false)
+    def initialize(region: 'ap-northeast-1', url:, access_key_id:, secret_access_key:,
+        visibility_timeout:, max_number_of_messages: 10, wait_time_seconds: 20, noop: false)
       @region = region
       @url = url
       @access_key_id = access_key_id
       @secret_access_key = secret_access_key
       @visibility_timeout = visibility_timeout
+      @max_number_of_messages = max_number_of_messages
+      @wait_time_seconds = wait_time_seconds
       @noop = noop
     end
 
@@ -58,7 +61,7 @@ module Bricolage
     end
 
     def initiate_terminate
-      logger.info "terminate initiated"
+      # No I/O allowed in this method
       @terminating = true
     end
 
@@ -67,11 +70,9 @@ module Bricolage
     end
 
     def insert_handler_wait(n_zero)
-      if n_zero > 0
-        sec = 2 ** [n_zero, 8].min   # max 64s
-        logger.info "queue wait: sleep #{sec}"
-        sleep sec
-      end
+      sec = 2 ** [n_zero, 6].min   # max 64s
+      logger.info "queue wait: sleep #{sec}" if n_zero > 0
+      sleep sec
     end
 
     def handle_messages(handlers:, message_class:)
@@ -81,6 +82,8 @@ module Bricolage
         # just ignore unknown event to make app migration easy
         if handlers.respond_to?(mid, true)
           handlers.__send__(mid, msg)
+        else
+          logger.error "unknown SQS message type: #{msg.message_type.inspect} (message-id: #{msg.message_id})"
         end
       end
       n_msg
@@ -92,6 +95,7 @@ module Bricolage
         logger.error "ReceiveMessage failed: #{result ? result.error.message : '(result=nil)'}"
         return nil
       end
+      logger.info "receive #{result.messages.size} messages" unless result.messages.empty?
       msgs = message_class.for_sqs_result(result)
       msgs.each(&block)
       msgs.size
@@ -106,10 +110,11 @@ module Bricolage
         queue_url: @url,
         attribute_names: ["All"],
         message_attribute_names: ["All"],
-        max_number_of_messages: 10,   # is max value
+        max_number_of_messages: @max_number_of_messages,
         visibility_timeout: @visibility_timeout,
-        wait_time_seconds: 10   # is max value
+        wait_time_seconds: @wait_time_seconds
       )
+      result
     end
 
     def delete_message(msg)
