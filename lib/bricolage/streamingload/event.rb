@@ -1,4 +1,3 @@
-require 'bricolage/streamingload/loadbuffer'
 require 'json'
 require 'time'
 
@@ -141,7 +140,7 @@ module Bricolage
       end
 
       def created?
-        /\AObjectCreated:/ =~ @name
+        !!(/\AObjectCreated:(?!Copy)/ =~ @name)
       end
 
       def loadable_object(url_patterns)
