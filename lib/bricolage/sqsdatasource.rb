@@ -47,6 +47,7 @@ module Bricolage
           n_zero = 0
         end
       end
+      logger.info "shutdown gracefully"
     end
 
     def trap_signals
@@ -57,6 +58,7 @@ module Bricolage
     end
 
     def initiate_terminate
+      logger.info "terminate initiated"
       @terminating = true
     end
 
