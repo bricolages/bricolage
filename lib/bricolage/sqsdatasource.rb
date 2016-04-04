@@ -1,4 +1,5 @@
 require 'bricolage/datasource'
+require 'bricolage/sqswrapper'
 require 'aws-sdk'
 require 'json'
 require 'time'
