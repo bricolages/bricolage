@@ -1,4 +1,4 @@
-require 'bricolage/streamingload/loadqueue'
+require 'bricolage/streamingload/task'
 require 'bricolage/sqlutils'
 require 'json'
 require 'securerandom'
@@ -39,10 +39,11 @@ module Bricolage
 
     class ObjectBuffer
 
-      def initialize(task_queue:, data_source:, buffer_size_max: 500, logger:)
+      def initialize(task_queue:, data_source:, buffer_size_max: 500, default_load_interval: 600, logger:)
         @task_queue = task_queue
         @ds = data_source
         @buffer_size_max = buffer_size_max
+        @default_load_interval = default_load_interval
         @logger = logger
         @buffers = {}
       end
@@ -53,6 +54,7 @@ module Bricolage
           task_queue: @task_queue,
           data_source: @ds,
           buffer_size_max: @buffer_size_max,
+          default_load_interval: @default_load_interval,
           logger: @logger
         ))
       end
@@ -64,12 +66,13 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(qualified_name, task_queue:, data_source:, buffer_size_max: 500, logger:)
+      def initialize(qualified_name, task_queue:, data_source:, buffer_size_max: 500, default_load_interval: 600, logger:)
         @qualified_name = qualified_name
         @schema, @table = qualified_name.split('.', 2)
         @task_queue = task_queue
         @ds = data_source
         @buffer_size_max = buffer_size_max
+        @default_load_interval = default_load_interval
         @logger = logger
         @buffer = nil
         @curr_task_id = nil
@@ -111,7 +114,7 @@ module Bricolage
         return nil if objects.empty?
         @logger.debug "flush initiated: #{@qualified_name} task_id=#{@curr_task_id}"
         objects.freeze
-        task = LoadTask.new(
+        task = LoadTask.create(
           task_id: @curr_task_id,
           schema: @schema,
           table: @table,
@@ -125,7 +128,7 @@ module Bricolage
 
       def load_interval
         # FIXME: load table property from the parameter table
-        600
+        @default_load_interval
       end
 
       private
@@ -152,7 +155,7 @@ module Bricolage
                 )
             values
                 ( #{s task.id}
-                , #{s task.task_class}
+                , #{s task.name}
                 , #{s task.schema}
                 , #{s task.table}
                 , getdate() :: timestamp
@@ -167,7 +170,7 @@ module Bricolage
             from
                 dwh_tasks
             where
-                dwh_task_id = #{s task_id}
+                dwh_task_id = #{s task.id}
             ;
         EndSQL
         dwh_task_seq

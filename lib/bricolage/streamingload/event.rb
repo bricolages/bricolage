@@ -17,8 +17,8 @@ module Bricolage
         end
       end
 
-      def event_id
-        raise "#{self.class}\#event_id must be implemented"
+      def message_type
+        raise "#{self.class}\#message_type must be implemented"
       end
 
       def data?
@@ -31,32 +31,25 @@ module Bricolage
     class ShutdownEvent < Event
 
       def ShutdownEvent.create
-        super name: 'shutdown', table_name: table_name, head_url: head_url
+        super name: 'shutdown'
       end
 
       def ShutdownEvent.parse_sqs_record(msg, rec)
         {}
       end
 
-      def event_id
-        'shutdown'
-      end
+      alias message_type name
 
-      def init_message(table_name:, head_url:)
-        @table_name = table_name
-        @head_url = head_url
+      def init_message
       end
-
-      attr_reader :table_name
-      attr_reader :head_url
 
     end
 
 
     class FlushEvent < Event
 
-      def FlushEvent.create(table_name:, head_url:, delay_seconds:)
-        super name: 'flush', table_name: table_name, head_url: head_url, delay_seconds: delay_seconds
+      def FlushEvent.create(delay_seconds:, table_name:, head_url:)
+        super name: 'flush', delay_seconds: delay_seconds, table_name: table_name, head_url: head_url
       end
 
       def FlushEvent.parse_sqs_record(msg, rec)
@@ -66,9 +59,7 @@ module Bricolage
         }
       end
 
-      def event_id
-        'flush'
-      end
+      alias message_type name
 
       def init_message(table_name:, head_url:)
         @table_name = table_name
@@ -77,6 +68,13 @@ module Bricolage
 
       attr_reader :table_name
       attr_reader :head_url
+
+      def body
+        obj = super
+        obj['tableName'] = @table_name
+        obj['headUrl'] = @head_url
+        obj
+      end
 
     end
 
@@ -92,7 +90,7 @@ module Bricolage
         }
       end
 
-      def event_id
+      def message_type
         'data'
       end
 

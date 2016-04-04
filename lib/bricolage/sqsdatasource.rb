@@ -35,6 +35,8 @@ module Bricolage
     #
 
     def main_handler_loop(handlers)
+      trap_signals
+
       n_zero = 0
       until terminating?
         insert_handler_wait(n_zero)
@@ -64,18 +66,19 @@ module Bricolage
 
     def insert_handler_wait(n_zero)
       if n_zero > 0
-        n = [n_zero, 8].min   # max 64s
-        sleep(2 ** n)
+        sec = 2 ** [n_zero, 8].min   # max 64s
+        logger.info "queue wait: sleep #{sec}"
+        sleep sec
       end
     end
 
     def handle_messages(handlers:, message_class:)
       n_msg = foreach_message(message_class) do |msg|
-        logger.debug "handling message: #{msg.name}"
+        logger.debug "handling message: #{msg.inspect}" if logger.debug?
         mid = "handle_#{msg.message_type}"
         # just ignore unknown event to make app migration easy
         if handlers.respond_to?(mid, true)
-          handlers.__send__(mid, e)
+          handlers.__send__(mid, msg)
         end
       end
       n_msg
@@ -98,7 +101,7 @@ module Bricolage
 
     def receive_messages
       result = client.receive_message(
-        queue_url: @queue_url,
+        queue_url: @url,
         attribute_names: ["All"],
         message_attribute_names: ["All"],
         max_number_of_messages: 10,   # is max value
@@ -137,8 +140,9 @@ module Bricolage
         name:,
         time: Time.now.getutc,
         source: SQS_EVENT_SOURCE,
-        delay_seconds: 0)
-      new(name: name, time: time, source: source, delay_seconds: delay_seconds)
+        delay_seconds: 0,
+        **message_params)
+      new(name: name, time: time, source: source, delay_seconds: delay_seconds, **message_params)
     end
 
     def SQSMessage.for_sqs_result(result)

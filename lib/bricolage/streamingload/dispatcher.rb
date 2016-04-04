@@ -2,7 +2,6 @@ require 'bricolage/sqsdatasource'
 require 'bricolage/streamingload/event'
 require 'bricolage/streamingload/objectbuffer'
 require 'bricolage/streamingload/urlpatterns'
-require 'bricolage/streamingload/sqswrapper'
 require 'aws-sdk'
 
 module Bricolage
@@ -22,17 +21,18 @@ module Bricolage
 
         ctx = Context.for_application('.')
 
-        event_queue = ctx.get_data_source('sqs', config['event-queue'])
-        task_queue = ctx.get_data_source('sqs', config['task-queue'])
+        event_queue = ctx.get_data_source('sqs', config.fetch('event-queue-ds'))
+        task_queue = ctx.get_data_source('sqs', config.fetch('task-queue-ds'))
 
-        obj_buffer = ObjectBuffer.new(
+        object_buffer = ObjectBuffer.new(
           task_queue: task_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
-          buffer_size_max: 3,
+          buffer_size_max: 10,
+          default_load_interval: 60,
           logger: ctx.logger
         )
 
-        url_patterns = URLPatterns.for_config(config['url_patterns'])
+        url_patterns = URLPatterns.for_config(config.fetch('url_patterns'))
 
         dispatcher = Dispatcher.new(
           event_queue: event_queue,
@@ -84,7 +84,7 @@ module Bricolage
       end
 
       def set_flush_timer(table_name, sec, head_url)
-        @event_queue.send_message FlushMessage.new(table_name, sec, head_url)
+        @event_queue.send_message FlushEvent.create(table_name: table_name, delay_seconds: sec, head_url: head_url)
       end
 
       def handle_flush(e)

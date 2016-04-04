@@ -28,6 +28,10 @@ module Bricolage
 
     class LoadTask < Task
 
+      def LoadTask.create(task_id:, schema:, table:, objects:)
+        super name: 'streamiong_load_v3', task_id: task_id, schema: schema, table: table, objects: objects
+      end
+
       def LoadTask.parse_sqs_record(msg, rec)
         {
           task_id: rec['dwhTaskId'],
@@ -104,14 +108,14 @@ module Bricolage
       end
 
       def body
-        h = super
-        h['dwhTaskId'] = @id
-        h['dwhTaskSeq'] = @seq
-        h['schemaName'] = @schema
-        h['tableName'] = @table
-        h['objectCount'] = @objects.size
-        h['totalObjectBytes'] = @objects.inject(0) {|sz, obj| sz + obj.size }
-        h
+        obj = super
+        obj['dwhTaskId'] = @id
+        obj['dwhTaskSeq'] = @seq
+        obj['schemaName'] = @schema
+        obj['tableName'] = @table
+        obj['objectCount'] = @objects.size
+        obj['totalObjectBytes'] = @objects.inject(0) {|sz, obj| sz + obj.size }
+        obj
       end
 
       #
