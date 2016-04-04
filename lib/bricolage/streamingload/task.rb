@@ -29,7 +29,7 @@ module Bricolage
     class LoadTask < Task
 
       def LoadTask.create(task_id:, schema:, table:, objects:)
-        super name: 'streamiong_load_v3', task_id: task_id, schema: schema, table: table, objects: objects
+        super name: 'streaming_load_v3', task_id: task_id, schema: schema, table: table, objects: objects
       end
 
       def LoadTask.parse_sqs_record(msg, rec)

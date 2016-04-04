@@ -27,7 +27,7 @@ module Bricolage
         object_buffer = ObjectBuffer.new(
           task_queue: task_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
-          buffer_size_max: 10,
+          buffer_size_max: 500,
           default_load_interval: 60,
           logger: ctx.logger
         )

@@ -137,6 +137,8 @@ module Bricolage
 
   class SQSMessage
 
+    SQS_EVENT_SOURCE = 'bricolage:system'
+
     # Writer interface
     def SQSMessage.create(
         name:,
@@ -172,8 +174,6 @@ module Bricolage
         source: rec['eventSource']
       }
     end
-
-    SQS_EVENT_SOURCE = 'bricolage:system'
 
     def initialize(name:, time:, source:,
         message_id: nil, receipt_handle: nil, delay_seconds: nil,
