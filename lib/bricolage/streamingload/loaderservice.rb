@@ -38,9 +38,18 @@ module Bricolage
           service.execute_task opts.task_id
         else
           # Server mode
-          # FIXME: handle --daemon
-          service.main_loop
+          Process.daemon(true) if opts.daemon?
+          create_pid_file opts.pid_file_path if opts.pid_file_path
+          service.event_loop
         end
+      end
+
+      def LoaderService.create_pid_file(path)
+        File.open(path, 'w') {|f|
+          f.puts $$
+        }
+      rescue
+        # ignore
       end
 
       def initialize(context:, data_source:, task_queue: nil, logger:)
@@ -56,7 +65,7 @@ module Bricolage
         loader.execute
       end
 
-      def main_loop
+      def event_loop
         @task_queue.main_handler_loop(handlers: self, message_class: Task)
       end
 
@@ -77,6 +86,7 @@ module Bricolage
         @argv = argv
         @task_id = nil
         @daemon = false
+        @pid_file_path = nil
         @rest_arguments = nil
 
         @opts = opts = OptionParser.new("Usage: #{$0} CONFIG_PATH")
@@ -85,6 +95,9 @@ module Bricolage
         }
         opts.on('--daemon', 'Becomes daemon in server mode.') {
           @daemon = true
+        }
+        opts.on('--pid-file=PATH', 'Creates PID file.') {|path|
+          @pid_file_path = path
         }
         opts.on('--help', 'Prints this message and quit.') {
           puts opts.help
@@ -100,15 +113,21 @@ module Bricolage
         @opts.help
       end
 
-      attr_reader :task_id
-      attr_reader :rest_arguments
-
       def parse
         @opts.parse!(@argv)
         @rest_arguments = @argv.dup
       rescue OptionParser::ParseError => err
         raise OptionError, err.message
       end
+
+      attr_reader :rest_arguments
+      attr_reader :task_id
+
+      def daemon?
+        @daemon
+      end
+
+      attr_reader :pid_file_path
 
     end
 

@@ -1,8 +1,12 @@
+require 'bricolage/exception'
+require 'bricolage/version'
 require 'bricolage/sqsdatasource'
 require 'bricolage/streamingload/event'
 require 'bricolage/streamingload/objectbuffer'
 require 'bricolage/streamingload/urlpatterns'
 require 'aws-sdk'
+require 'yaml'
+require 'optparse'
 
 module Bricolage
 
@@ -11,16 +15,16 @@ module Bricolage
     class Dispatcher
 
       def Dispatcher.main
-        # FIXME
-        ENV['AWS_REGION'] = 'ap-northeast-1'
-        require 'pp'
-        require 'yaml'
-        require 'bricolage'
+        opts = DispatcherOptions.new(ARGV)
+        opts.parse
+        unless opts.rest_arguments.size == 1
+          $stderr.puts opts.usage
+          exit 1
+        end
+        config_path, * = opts.rest_arguments
 
-        config = YAML.load(File.read(ARGV[0]))
-
+        config = YAML.load(File.read(config_path))
         ctx = Context.for_application('.')
-
         event_queue = ctx.get_data_source('sqs', config.fetch('event-queue-ds'))
         task_queue = ctx.get_data_source('sqs', config.fetch('task-queue-ds'))
 
@@ -41,8 +45,17 @@ module Bricolage
           logger: ctx.logger
         )
 
-        #dispatcher.main
+        Process.daemon(true) if opts.daemon?
+        create_pid_file opts.pid_file_path if opts.pid_file_path
         dispatcher.event_loop
+      end
+
+      def Dispatcher.create_pid_file(path)
+        File.open(path, 'w') {|f|
+          f.puts $$
+        }
+      rescue
+        # ignore
       end
 
       def initialize(event_queue:, object_buffer:, url_patterns:, logger:)
@@ -50,11 +63,6 @@ module Bricolage
         @object_buffer = object_buffer
         @url_patterns = url_patterns
         @logger = logger
-      end
-
-      def main
-        #daemon
-        event_loop
       end
 
       def event_loop
@@ -101,6 +109,56 @@ module Bricolage
 
     end
 
-  end
 
-end
+    class DispatcherOptions
+
+      def initialize(argv)
+        @argv = argv
+        @daemon = false
+        @pid_file_path = nil
+        @rest_arguments = nil
+
+        @opts = opts = OptionParser.new("Usage: #{$0} CONFIG_PATH")
+        opts.on('--task-id=ID', 'Execute oneshot load task (implicitly disables daemon mode).') {|task_id|
+          @task_id = task_id
+        }
+        opts.on('--daemon', 'Becomes daemon in server mode.') {
+          @daemon = true
+        }
+        opts.on('--pid-file=PATH', 'Creates PID file.') {|path|
+          @pid_file_path = path
+        }
+        opts.on('--help', 'Prints this message and quit.') {
+          puts opts.help
+          exit 0
+        }
+        opts.on('--version', 'Prints version and quit.') {
+          puts "#{File.basename($0)} version #{VERSION}"
+          exit 0
+        }
+      end
+
+      def usage
+        @opts.help
+      end
+
+      def parse
+        @opts.parse!(@argv)
+        @rest_arguments = @argv.dup
+      rescue OptionParser::ParseError => err
+        raise OptionError, err.message
+      end
+
+      attr_reader :rest_arguments
+
+      def daemon?
+        @daemon
+      end
+
+      attr_reader :pid_file_path
+
+    end
+
+  end   # module StreamingLoad
+
+end   # module Bricolage
