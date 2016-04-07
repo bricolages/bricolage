@@ -222,6 +222,7 @@ class StreamingLoadJobClass < RubyJobClass
         from '#{manifest_url}'
         credentials '#{@src.credential_string}'
         manifest
+        compupdate false
         statupdate false
         #{@load_options}
       ;).gsub(/\s+/, ' ').strip
@@ -277,6 +278,7 @@ class StreamingLoadJobClass < RubyJobClass
         credentials '#{credential_string}'
         delimiter ','
         removequotes
+        compupdate false
       ;).gsub(/\s+/, ' ').strip
     end
 
