@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.2
+
+- [fix] streaming_load: Disables compupdate on COPY.   This *might* cause Assert error on some clusters.
+
 ## version 5.16.1
 
 - [fix] Fixes syntax error on ruby 2.1
