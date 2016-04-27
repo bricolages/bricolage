@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.3
+
+- [fix] streaming_load: Disables statupdate for log staging table, it is useless.
+
 ## version 5.16.2
 
 - [fix] streaming_load: Disables compupdate on COPY.   This *might* cause Assert error on some clusters.
