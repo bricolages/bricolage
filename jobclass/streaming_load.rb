@@ -279,6 +279,7 @@ class StreamingLoadJobClass < RubyJobClass
         delimiter ','
         removequotes
         compupdate false
+        statupdate false
       ;).gsub(/\s+/, ' ').strip
     end
 
