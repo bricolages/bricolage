@@ -80,14 +80,13 @@ module Bricolage
           return
         end
         obj = e.loadable_object(@url_patterns)
-        buf = @object_buffer[obj.qualified_name]
-        if buf.empty?
-          set_flush_timer obj.qualified_name, buf.load_interval, obj.url
+        if @object_buffer.empty?
+          set_flush_timer obj.qualified_name, @object_buffer.load_interval, obj.url
         end
-        buf.put(obj)
-        if buf.full?
-          load_task = buf.flush
-          delete_events(load_task.source_events) if load_task
+        @object_buffer.put(obj)
+        if @object_buffer.full?
+          load_tasks = @object_buffer.flush
+          load_tasks.each {|load_task| delete_events(load_task.source_events)} if load_tasks
         end
       end
 
@@ -96,8 +95,8 @@ module Bricolage
       end
 
       def handle_flush(e)
-        load_task = @object_buffer[e.table_name].flush_if(head_url: e.head_url)
-        delete_events(load_task.source_events) if load_task
+        load_tasks = @object_buffer.flush_if(head_url: e.head_url)
+        load_tasks.each {|load_task| delete_events(load_task.source_events)} if load_tasks
         @event_queue.delete_message(e)
       end
 
