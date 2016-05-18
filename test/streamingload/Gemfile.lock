@@ -1,0 +1,72 @@
+PATH
+  remote: ../..
+  specs:
+    bricolage (5.15.2)
+      aws-sdk (~> 2)
+      mysql2
+      pg
+      redis (>= 3.0.0)
+      td
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    aws-sdk (2.3.5)
+      aws-sdk-resources (= 2.3.5)
+    aws-sdk-core (2.3.5)
+      jmespath (~> 1.0)
+    aws-sdk-resources (2.3.5)
+      aws-sdk-core (= 2.3.5)
+    coderay (1.1.1)
+    fluent-logger (0.5.1)
+      msgpack (>= 0.4.4, < 0.6.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
+    hirb (0.7.3)
+    httpclient (2.8.0)
+    jmespath (1.2.4)
+      json_pure (>= 1.8.1)
+    json (1.8.3)
+    json_pure (1.8.3)
+    method_source (0.8.2)
+    msgpack (0.5.12)
+    mysql2 (0.4.4)
+    parallel (1.8.0)
+    pg (0.18.4)
+    pry (0.10.3)
+      coderay (~> 1.1.0)
+      method_source (~> 0.8.1)
+      slop (~> 3.4)
+    redis (3.3.0)
+    ruby-progressbar (1.7.5)
+    rubyzip (1.1.7)
+    slop (3.6.0)
+    td (0.14.0)
+      hirb (>= 0.4.5)
+      msgpack (>= 0.4.4, < 0.8.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
+      parallel (~> 1.8.0)
+      ruby-progressbar (~> 1.7.5)
+      rubyzip (~> 1.1.7)
+      td-client (~> 0.8.79)
+      td-logger (~> 0.3.21)
+      yajl-ruby (~> 1.1)
+      zip-zip (~> 0.3)
+    td-client (0.8.79)
+      httpclient (~> 2.7)
+      json (>= 1.7.6)
+      msgpack (>= 0.4.4, < 0.8.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
+    td-logger (0.3.25)
+      fluent-logger (~> 0.5.0)
+      msgpack (>= 0.4.4, < 0.8.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
+      td-client (~> 0.8.66)
+    yajl-ruby (1.2.1)
+    zip-zip (0.3)
+      rubyzip (>= 1.0.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  bricolage!
+  pry
+
+BUNDLED WITH
+   1.11.2
