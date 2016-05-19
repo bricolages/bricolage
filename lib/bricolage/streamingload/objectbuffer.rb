@@ -184,6 +184,7 @@ module Bricolage
       end
 
       def head_url
+        return nil if empty?
         @buffer.first.url
       end
 

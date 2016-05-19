@@ -121,7 +121,6 @@ module Bricolage
       def self.declarations(params)
         Bricolage::Declarations.new(
           'dest_table' => nil,
-          'work_table' => nil
         )
       end
 
