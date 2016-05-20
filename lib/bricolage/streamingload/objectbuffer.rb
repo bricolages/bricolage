@@ -39,6 +39,8 @@ module Bricolage
 
     class ObjectBuffer
 
+      include SQLUtils
+
       def initialize(task_queue:, data_source:, buffer_size_max: 500, default_load_interval: 600, logger:)
         @task_queue = task_queue
         @ds = data_source
@@ -48,82 +50,37 @@ module Bricolage
         @buffers = {}
       end
 
-      def [](key)
-        (@buffers[key] ||= TableObjectBuffer.new(
-          key,
-          task_queue: @task_queue,
-          data_source: @ds,
-          buffer_size_max: @buffer_size_max,
-          default_load_interval: @default_load_interval,
-          logger: @logger
-        ))
-      end
-
-    end
-
-
-    class TableObjectBuffer
-
-      include SQLUtils
-
-      def initialize(qualified_name, task_queue:, data_source:, buffer_size_max: 500, default_load_interval: 600, logger:)
-        @qualified_name = qualified_name
-        @schema, @table = qualified_name.split('.', 2)
-        @task_queue = task_queue
-        @ds = data_source
-        @buffer_size_max = buffer_size_max
-        @default_load_interval = default_load_interval
-        @logger = logger
-        @buffer = nil
-        @curr_task_id = nil
-        clear
-      end
-
-      attr_reader :qualified_name
-
-      def clear
-        @buffer = []
-        @curr_task_id = "#{Time.now.strftime('%Y%m%d%H%M%S')}_#{'%05d' % Process.pid}_#{SecureRandom.uuid}"
+      def put(obj)
+        self[obj.qualified_name].put obj
       end
 
       def empty?
-        @buffer.empty?
+        @buffers.values.all? {|buf| buf.empty?}
       end
 
       def full?
-        @buffer.size >= @buffer_size_max
+        @buffers.values.map {|buf| buf.size}.reduce {|sum, n| sum + n} >= @buffer_size_max
       end
 
-      def put(obj)
-        # FIXME: take AWS region into account (Redshift COPY stmt cannot load data from multiple regions)
-        @buffer.push obj
-        obj
+      def [](key)
+        (@buffers[key] ||= TableObjectBuffer.new(key, logger: @logger))
+      end
+
+      def flush
+        return nil if empty?
+        tasks = @buffers.values.map {|buf| buf.flush}.compact
+        write_task_payloads tasks
+        tasks.each {|task| @task_queue.put task}
+        return tasks
       end
 
       def flush_if(head_url:)
         return nil if empty?
-        if @buffer.first.url == head_url
+        if @buffers.values.any? {|buf| buf.head_url == head_url}
           flush
         else
           nil
         end
-      end
-
-      def flush
-        objects = @buffer
-        return nil if objects.empty?
-        @logger.debug "flush initiated: #{@qualified_name} task_id=#{@curr_task_id}"
-        objects.freeze
-        task = LoadTask.create(
-          task_id: @curr_task_id,
-          schema: @schema,
-          table: @table,
-          objects: objects
-        )
-        write_task_payload task
-        @task_queue.put task
-        clear
-        return task
       end
 
       def load_interval
@@ -133,12 +90,16 @@ module Bricolage
 
       private
 
-      def write_task_payload(task)
+      def write_task_payloads(tasks)
         @ds.open {|conn|
           conn.transaction {
-            task.seq = write_task(conn, task)
-            task.objects.each do |obj|
-              write_task_file(conn, task.seq, obj)
+            tasks.each do |task|
+              task.seq = write_task(conn, task)
+            end
+            tasks.each do |task|
+              task.objects.each do |obj|
+                write_task_file(conn, task.seq, obj)
+              end
             end
           }
         }
@@ -194,6 +155,62 @@ module Bricolage
                 )
             ;
         EndSQL
+      end
+
+    end
+
+
+    class TableObjectBuffer
+
+      include SQLUtils
+
+      def initialize(qualified_name, logger:)
+        @qualified_name = qualified_name
+        @schema, @table = qualified_name.split('.', 2)
+        @buffer = nil
+        @curr_task_id = nil
+        @logger = logger
+        clear
+      end
+
+      attr_reader :qualified_name, :schema, :table, :curr_task_id
+
+      def empty?
+        @buffer.empty?
+      end
+
+      def size
+        @buffer.size
+      end
+
+      def head_url
+        @buffer.first.url
+      end
+
+      def clear
+        @buffer = []
+        @curr_task_id = "#{Time.now.strftime('%Y%m%d%H%M%S')}_#{'%05d' % Process.pid}_#{SecureRandom.uuid}"
+      end
+
+      def put(obj)
+        # FIXME: take AWS region into account (Redshift COPY stmt cannot load data from multiple regions)
+        @buffer.push obj
+        obj
+      end
+
+      def flush
+        objects = @buffer
+        return nil if objects.empty?
+        @logger.debug "flush initiated: #{@qualified_name} task_id=#{@curr_task_id}"
+        objects.freeze
+        task = LoadTask.create(
+          task_id: @curr_task_id,
+          schema: @schema,
+          table: @table,
+          objects: objects
+        )
+        clear
+        return task
       end
 
     end
