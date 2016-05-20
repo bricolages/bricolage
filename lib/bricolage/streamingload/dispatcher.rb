@@ -31,9 +31,9 @@ module Bricolage
         object_buffer = ObjectBuffer.new(
           task_queue: task_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
-          buffer_size_max: 500,
-          default_load_interval: 60,
-          logger: ctx.logger
+          default_buffer_size_limit: 500,
+          default_load_interval: 300,
+          ctx: ctx
         )
 
         url_patterns = URLPatterns.for_config(config.fetch('url_patterns'))
@@ -80,12 +80,13 @@ module Bricolage
           return
         end
         obj = e.loadable_object(@url_patterns)
-        if @object_buffer.empty?
-          set_flush_timer obj.qualified_name, @object_buffer.load_interval, obj.url
+        buf = @object_buffer[obj.qualified_name]
+        if @object_buffer.empty_buffers_intervals.include? buf.load_interval
+          set_flush_timer buf.qualified_name, buf.load_interval, obj.url
         end
-        @object_buffer.put(obj)
-        if @object_buffer.full?
-          load_tasks = @object_buffer.flush
+        buf.put(obj)
+        if @object_buffer.any_full?
+          load_tasks = @object_buffer.flush_full
           load_tasks.each {|load_task| delete_events(load_task.source_events)} if load_tasks
         end
       end
@@ -94,6 +95,8 @@ module Bricolage
         @event_queue.send_message FlushEvent.create(table_name: table_name, delay_seconds: sec, head_url: head_url)
       end
 
+      # Flush all loadable objects which has same load_interval as the object's with specified head_url
+      # It would be more clear code if FlushEvent has load_interval
       def handle_flush(e)
         load_tasks = @object_buffer.flush_if(head_url: e.head_url)
         load_tasks.each {|load_task| delete_events(load_task.source_events)} if load_tasks

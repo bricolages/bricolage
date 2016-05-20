@@ -1,4 +1,5 @@
 require 'bricolage/streamingload/task'
+require 'bricolage/streamingload/loaderparams'
 require 'bricolage/sqlutils'
 require 'json'
 require 'securerandom'
@@ -41,54 +42,85 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(task_queue:, data_source:, buffer_size_max: 500, default_load_interval: 600, logger:)
+      def initialize(task_queue:, data_source:, default_buffer_size_limit: 500, default_load_interval: 600, ctx:)
         @task_queue = task_queue
         @ds = data_source
-        @buffer_size_max = buffer_size_max
+        @default_buffer_size_limit = default_buffer_size_limit
         @default_load_interval = default_load_interval
-        @logger = logger
+        @ctx = ctx
+        @logger = ctx.logger
         @buffers = {}
       end
 
-      def put(obj)
-        self[obj.qualified_name].put obj
-      end
-
-      def empty?
+      def all_empty?
         @buffers.values.all? {|buf| buf.empty?}
       end
 
-      def full?
-        @buffers.values.map {|buf| buf.size}.reduce {|sum, n| sum + n} >= @buffer_size_max
+      def any_empty?
+        @buffers.values.any? {|buf| buf.empty?}
+      end
+
+      # Retrun distinct load_interval(s) of empty buffers
+      def empty_buffers_intervals
+        @buffers.values.group_by {|buf| buf.load_interval}.select {|i,buf| buf.all? {|b| b.empty?}}.keys
+      end
+
+      def any_full?
+        @buffers.values.any? {|buf| buf.full?}
       end
 
       def [](key)
-        (@buffers[key] ||= TableObjectBuffer.new(key, logger: @logger))
+        (@buffers[key] ||= new_table_object_buffer(key))
       end
 
-      def flush
-        return nil if empty?
-        tasks = @buffers.values.map {|buf| buf.flush}.compact
-        write_task_payloads tasks
-        tasks.each {|task| @task_queue.put task}
-        return tasks
+      def flush(interval:)
+        return nil if all_empty?
+        buffers = interval ? buffers_with_interval(interval) : @buffers.values
+        flush_buffers(buffers)
       end
 
+      def flush_full
+        return nil if !any_full?
+        flush_buffers(full_buffers)
+      end
+
+      # Flush all buffers which has same load_interval as the buffer include head_url
+      #TODO  Add load_interval parameter
       def flush_if(head_url:)
-        return nil if empty?
-        if @buffers.values.any? {|buf| buf.head_url == head_url}
-          flush
+        return nil if all_empty?
+        buf = @buffers.values.select {|buf| buf.head_url == head_url}
+        if buf.size > 0
+          flush(interval: buf[0].load_interval)
         else
           nil
         end
       end
 
-      def load_interval
-        # FIXME: load table property from the parameter table
-        @default_load_interval
+      private
+
+      def flush_buffers(buffers)
+        tasks = buffers.map {|buf| buf.flush}.compact
+        write_task_payloads tasks
+        tasks.each {|task| @task_queue.put task}
+        return tasks
       end
 
-      private
+      def full_buffers
+        @buffers.values.select {|buf| buf.full?}
+      end
+
+      def buffers_with_interval(interval)
+        @buffers.values.select {|buf| buf.load_interval == interval}
+      end
+
+      def new_table_object_buffer(key)
+        schema, table = key.split('.', 2)
+        job = LoaderParams.load_job(@ctx, schema, table)
+        job.compile
+        buffer_size_limit = job.params['buffer-size-limit'] || @default_buffer_size_limit
+        load_interval = job.params['load-interval'] || @default_load_interval
+        TableObjectBuffer.new(schema, table, buffer_size_limit, load_interval, logger: @logger)
+      end
 
       def write_task_payloads(tasks)
         @ds.open {|conn|
@@ -159,24 +191,33 @@ module Bricolage
 
     end
 
-
     class TableObjectBuffer
 
       include SQLUtils
 
-      def initialize(qualified_name, logger:)
-        @qualified_name = qualified_name
-        @schema, @table = qualified_name.split('.', 2)
+      def initialize(schema, table, buffer_size_limit, load_interval, logger:)
+        @schema = schema
+        @table = table
+        @buffer_size_limit = buffer_size_limit
+        @load_interval = load_interval
         @buffer = nil
         @curr_task_id = nil
         @logger = logger
         clear
       end
 
-      attr_reader :qualified_name, :schema, :table, :curr_task_id
+      attr_reader :schema, :table, :buffer_size_limit, :load_interval, :curr_task_id
+
+      def qualified_name
+        "#{schema}.#{table}"
+      end
 
       def empty?
         @buffer.empty?
+      end
+
+      def full?
+        size > @buffer_size_limit
       end
 
       def size
@@ -188,15 +229,15 @@ module Bricolage
         @buffer.first.url
       end
 
-      def clear
-        @buffer = []
-        @curr_task_id = "#{Time.now.strftime('%Y%m%d%H%M%S')}_#{'%05d' % Process.pid}_#{SecureRandom.uuid}"
-      end
-
       def put(obj)
         # FIXME: take AWS region into account (Redshift COPY stmt cannot load data from multiple regions)
         @buffer.push obj
         obj
+      end
+
+      def clear
+        @buffer = []
+        @curr_task_id = "#{Time.now.strftime('%Y%m%d%H%M%S')}_#{'%05d' % Process.pid}_#{SecureRandom.uuid}"
       end
 
       def flush

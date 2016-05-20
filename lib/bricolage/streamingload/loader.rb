@@ -60,7 +60,7 @@ module Bricolage
             success = false
           end
         }
-        raise JobFailure, "could not assign task: #{task.id}" unless success
+        raise JobFailure, "could not assign task: #{@params.task_id}" unless success
       end
 
       def do_load
