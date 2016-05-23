@@ -9,6 +9,7 @@ module Bricolage
       def Event.get_concrete_class(msg, rec)
         case
         when rec['eventName'] == 'shutdown' then ShutdownEvent
+        when rec['eventName'] == 'processflush' then ProcessFlushEvent
         when rec['eventName'] == 'flush' then FlushEvent
         when rec['eventSource'] == 'aws:s3'
           S3ObjectEvent
@@ -48,34 +49,42 @@ module Bricolage
 
     class FlushEvent < Event
 
-      def FlushEvent.create(delay_seconds:, table_name:, head_url:)
-        super name: 'flush', delay_seconds: delay_seconds, table_name: table_name, head_url: head_url
+      def FlushEvent.create(delay_seconds:, table_name:)
+        super name: 'flush', delay_seconds: delay_seconds, table_name: table_name
       end
 
       def FlushEvent.parse_sqs_record(msg, rec)
         {
-          table_name: rec['tableName'],
-          head_url: rec['headUrl']
+          table_name: rec['tableName']
         }
       end
 
       alias message_type name
 
-      def init_message(table_name:, head_url:)
+      def init_message(table_name:)
         @table_name = table_name
-        @head_url = head_url
       end
 
       attr_reader :table_name
-      attr_reader :head_url
 
       def body
         obj = super
         obj['tableName'] = @table_name
-        obj['headUrl'] = @head_url
         obj
       end
 
+    end
+
+    class ProcessFlushEvent < Event
+
+      def ProcessFlushEvent.create(delay_seconds:)
+        super name: 'processflush', delay_seconds: delay_seconds
+      end
+
+      alias message_type name
+
+      def init_message(dummy)
+      end
     end
 
 

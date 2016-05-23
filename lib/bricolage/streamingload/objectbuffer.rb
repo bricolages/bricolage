@@ -42,75 +42,35 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(task_queue:, data_source:, default_buffer_size_limit: 500, default_load_interval: 600, ctx:)
+      def initialize(task_queue:, data_source:, default_buffer_size_limit: 500, default_load_interval: 600, flush_process_interval: 60, ctx:)
         @task_queue = task_queue
         @ds = data_source
         @default_buffer_size_limit = default_buffer_size_limit
         @default_load_interval = default_load_interval
+        @flush_process_interval = flush_process_interval
         @ctx = ctx
         @logger = ctx.logger
         @buffers = {}
       end
 
-      def all_empty?
-        @buffers.values.all? {|buf| buf.empty?}
-      end
-
-      def any_empty?
-        @buffers.values.any? {|buf| buf.empty?}
-      end
-
-      # Retrun distinct load_interval(s) of empty buffers
-      def empty_buffers_intervals
-        @buffers.values.group_by {|buf| buf.load_interval}.select {|i,buf| buf.all? {|b| b.empty?}}.keys
-      end
-
-      def any_full?
-        @buffers.values.any? {|buf| buf.full?}
-      end
+      attr_reader :flush_process_interval
 
       def [](key)
         (@buffers[key] ||= new_table_object_buffer(key))
       end
 
-      def flush(interval:)
-        return nil if all_empty?
-        buffers = interval ? buffers_with_interval(interval) : @buffers.values
-        flush_buffers(buffers)
-      end
-
-      def flush_full
-        return nil if !any_full?
-        flush_buffers(full_buffers)
-      end
-
-      # Flush all buffers which has same load_interval as the buffer include head_url
-      #TODO  Add load_interval parameter
-      def flush_if(head_url:)
-        return nil if all_empty?
-        buf = @buffers.values.select {|buf| buf.head_url == head_url}
-        if buf.size > 0
-          flush(interval: buf[0].load_interval)
-        else
-          nil
-        end
+      def flush_required_buffers
+        tasks = buffers_to_flush.map {|buf| buf.flush }.compact
+        return [] if tasks.empty? # Avoid empty transaction
+        write_task_payloads tasks
+        tasks.each {|task| @task_queue.put task }
+        return tasks
       end
 
       private
 
-      def flush_buffers(buffers)
-        tasks = buffers.map {|buf| buf.flush}.compact
-        write_task_payloads tasks
-        tasks.each {|task| @task_queue.put task}
-        return tasks
-      end
-
-      def full_buffers
-        @buffers.values.select {|buf| buf.full?}
-      end
-
-      def buffers_with_interval(interval)
-        @buffers.values.select {|buf| buf.load_interval == interval}
+      def buffers_to_flush
+        @buffers.values.select {|buf| buf.needs_flush? }
       end
 
       def new_table_object_buffer(key)
@@ -203,13 +163,14 @@ module Bricolage
         @buffer = nil
         @curr_task_id = nil
         @logger = logger
+        @flush_requested = false
         clear
       end
 
       attr_reader :schema, :table, :buffer_size_limit, :load_interval, :curr_task_id
 
       def qualified_name
-        "#{schema}.#{table}"
+        "#{@schema}.#{@table}"
       end
 
       def empty?
@@ -217,16 +178,7 @@ module Bricolage
       end
 
       def full?
-        size > @buffer_size_limit
-      end
-
-      def size
-        @buffer.size
-      end
-
-      def head_url
-        return nil if empty?
-        @buffer.first.url
+        @buffer.size >= @buffer_size_limit
       end
 
       def put(obj)
@@ -235,9 +187,18 @@ module Bricolage
         obj
       end
 
+      def request_flush
+        @flush_requested = true
+      end
+
+      def needs_flush?
+        full? || @flush_requested
+      end
+
       def clear
         @buffer = []
         @curr_task_id = "#{Time.now.strftime('%Y%m%d%H%M%S')}_#{'%05d' % Process.pid}_#{SecureRandom.uuid}"
+        @flush_requested = false
       end
 
       def flush

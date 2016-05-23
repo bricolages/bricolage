@@ -33,6 +33,7 @@ module Bricolage
           data_source: ctx.get_data_source('sql', 'sql'),
           default_buffer_size_limit: 500,
           default_load_interval: 300,
+          flush_process_interval: 60,
           ctx: ctx
         )
 
@@ -66,6 +67,7 @@ module Bricolage
       end
 
       def event_loop
+        set_processflush_timer
         @event_queue.main_handler_loop(handlers: self, message_class: Event)
       end
 
@@ -81,26 +83,30 @@ module Bricolage
         end
         obj = e.loadable_object(@url_patterns)
         buf = @object_buffer[obj.qualified_name]
-        if @object_buffer.empty_buffers_intervals.include? buf.load_interval
-          set_flush_timer buf.qualified_name, buf.load_interval, obj.url
+        if buf.empty?
+          set_flush_timer obj.qualified_name, buf.load_interval
         end
         buf.put(obj)
-        if @object_buffer.any_full?
-          load_tasks = @object_buffer.flush_full
-          load_tasks.each {|load_task| delete_events(load_task.source_events)} if load_tasks
-        end
       end
 
-      def set_flush_timer(table_name, sec, head_url)
-        @event_queue.send_message FlushEvent.create(table_name: table_name, delay_seconds: sec, head_url: head_url)
+      def set_flush_timer(table_name, sec)
+        @event_queue.send_message FlushEvent.create(table_name: table_name, delay_seconds: sec)
       end
 
-      # Flush all loadable objects which has same load_interval as the object's with specified head_url
-      # It would be more clear code if FlushEvent has load_interval
       def handle_flush(e)
-        load_tasks = @object_buffer.flush_if(head_url: e.head_url)
-        load_tasks.each {|load_task| delete_events(load_task.source_events)} if load_tasks
+        @object_buffer[e.table_name].request_flush
         @event_queue.delete_message(e)
+      end
+
+      def handle_processflush(e)
+        load_tasks = @object_buffer.flush_required_buffers
+        load_tasks.each {|load_task| delete_events(load_task.source_events) }
+        @event_queue.delete_message(e)
+        set_processflush_timer
+      end
+
+      def set_processflush_timer
+        @event_queue.send_message ProcessFlushEvent.create(delay_seconds: @object_buffer.flush_process_interval)
       end
 
       def delete_events(events)
