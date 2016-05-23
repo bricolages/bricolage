@@ -53,8 +53,9 @@ module Bricolage
           # These result record MUST be written in the same transaction.
           # DO NOT raise exception here
           if already_processed
-            write_job_error 'failure', "task is already processed by other jobs"
-            success = false
+            # Skip already processed task (may happen with second and later "duplicated" sqs messages)
+            #FIXME May leave object unprocessed when running multiple loader concurrently
+            write_job_result 'success', 'task is already processed by other jobs'
           elsif table_in_use
             write_job_error 'failure', "other jobs are working on the target table"
             success = false
