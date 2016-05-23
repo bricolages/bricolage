@@ -24,4 +24,5 @@ Gem::Specification.new do |s|
   s.add_dependency 'redis', ">= 3.0.0"
   s.add_development_dependency 'test-unit'
   s.add_development_dependency 'pry'
+  s.add_development_dependency 'rake'
 end
