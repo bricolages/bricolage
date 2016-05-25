@@ -36,6 +36,7 @@ GEM
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
       slop (~> 3.4)
+    rake (11.1.2)
     redis (3.3.0)
     ruby-progressbar (1.7.5)
     rubyzip (1.1.7)
@@ -70,6 +71,7 @@ PLATFORMS
 DEPENDENCIES
   bricolage!
   pry
+  rake
   test-unit
 
 BUNDLED WITH
