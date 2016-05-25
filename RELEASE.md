@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.16.4
+
+- [fix] Adds dependency to rake
+- [fix] my-import: Reduces warning log messages.
+
 ## version 5.16.3
 
 - [fix] streaming_load: Disables statupdate for log staging table, it is useless.
