@@ -33,8 +33,8 @@ module Bricolage
           data_source: ctx.get_data_source('sql', 'sql'),
           default_buffer_size_limit: 500,
           default_load_interval: 300,
-          flush_process_interval: 60,
-          ctx: ctx
+          process_flush_interval: 60,
+          context: ctx
         )
 
         url_patterns = URLPatterns.for_config(config.fetch('url_patterns'))
@@ -99,14 +99,14 @@ module Bricolage
       end
 
       def handle_processflush(e)
-        load_tasks = @object_buffer.flush_required_buffers
+        load_tasks = @object_buffer.process_flush
         load_tasks.each {|load_task| delete_events(load_task.source_events) }
         @event_queue.delete_message(e)
         set_processflush_timer
       end
 
       def set_processflush_timer
-        @event_queue.send_message ProcessFlushEvent.create(delay_seconds: @object_buffer.flush_process_interval)
+        @event_queue.send_message ProcessFlushEvent.create(delay_seconds: @object_buffer.process_flush_interval)
       end
 
       def delete_events(events)

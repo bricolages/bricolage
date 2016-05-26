@@ -42,25 +42,25 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(task_queue:, data_source:, default_buffer_size_limit: 500, default_load_interval: 600, flush_process_interval: 60, ctx:)
+      def initialize(task_queue:, data_source:, default_buffer_size_limit: 500, default_load_interval: 600, process_flush_interval: 60, context:)
         @task_queue = task_queue
         @ds = data_source
         @default_buffer_size_limit = default_buffer_size_limit
         @default_load_interval = default_load_interval
-        @flush_process_interval = flush_process_interval
-        @ctx = ctx
-        @logger = ctx.logger
+        @process_flush_interval = process_flush_interval
+        @ctx = context
+        @logger = context.logger
         @buffers = {}
       end
 
-      attr_reader :flush_process_interval
+      attr_reader :process_flush_interval
 
       def [](key)
         (@buffers[key] ||= new_table_object_buffer(key))
       end
 
-      def flush_required_buffers
-        tasks = buffers_to_flush.map {|buf| buf.flush }.compact
+      def process_flush
+        tasks = flush_required_buffers.map {|buf| buf.flush }.compact
         return [] if tasks.empty? # Avoid empty transaction
         write_task_payloads tasks
         tasks.each {|task| @task_queue.put task }
@@ -69,8 +69,8 @@ module Bricolage
 
       private
 
-      def buffers_to_flush
-        @buffers.values.select {|buf| buf.needs_flush? }
+      def flush_required_buffers
+        @buffers.values.select {|buf| buf.flush_requested? || buf.full? }
       end
 
       def new_table_object_buffer(key)
@@ -191,8 +191,8 @@ module Bricolage
         @flush_requested = true
       end
 
-      def needs_flush?
-        full? || @flush_requested
+      def flush_requested?
+        @flush_requested
       end
 
       def clear

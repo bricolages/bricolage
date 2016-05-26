@@ -31,7 +31,7 @@ module Bricolage
       def execute
         @params.ds.open {|conn|
           @connection = conn
-          # Do nothing if task already running or succeeded
+          # Do nothing if the task already running or succeeded
           # Retry if error
           return if task_processed?(@params.task_seq)
           assign_task
@@ -119,7 +119,7 @@ module Bricolage
                 dwh_jobs t
             left outer join
                 dwh_job_results
-            using(dwh_job_seq)
+                using(dwh_job_seq)
             where
                 t.dwh_task_seq = #{task_seq}
                 and (

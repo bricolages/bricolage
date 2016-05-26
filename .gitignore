@@ -1,6 +1,5 @@
 *.gem
 *.rbc
-.vscode
 .bundle
 .config
 coverage
