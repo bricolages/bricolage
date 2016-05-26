@@ -56,7 +56,8 @@ module Bricolage
       attr_reader :process_flush_interval
 
       def [](key)
-        (@buffers[key] ||= new_table_object_buffer(key))
+        # store nil to avoid invoking can_buffer? on next call
+        (@buffers[key] ||= can_buffer?(key) ? new_table_object_buffer(key) : nil)
       end
 
       def process_flush
@@ -69,12 +70,21 @@ module Bricolage
 
       private
 
+      def can_buffer?(key)
+        schema, table = split(key)
+        LoaderParams.find_job_file(@ctx, schema, table) ? true : false
+      end
+
+      def split(qualified_name)
+        qualified_name.split('.', 2)
+      end
+
       def flush_required_buffers
-        @buffers.values.select {|buf| buf.flush_requested? || buf.full? }
+        @buffers.values.compact.select {|buf| buf.flush_requested? || buf.full? }
       end
 
       def new_table_object_buffer(key)
-        schema, table = key.split('.', 2)
+        schema, table = split(key)
         job = LoaderParams.load_job(@ctx, schema, table)
         job.compile
         buffer_size_limit = job.params['buffer-size-limit'] || @default_buffer_size_limit

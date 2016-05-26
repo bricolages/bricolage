@@ -83,6 +83,10 @@ module Bricolage
         end
         obj = e.loadable_object(@url_patterns)
         buf = @object_buffer[obj.qualified_name]
+        unless buf
+          @event_queue.delete_message(e)
+          return
+        end
         if buf.empty?
           set_flush_timer obj.qualified_name, buf.load_interval
         end
