@@ -55,6 +55,7 @@ module Bricolage
           @connection.transaction {
             commit_job_result
           }
+          return
         end
         ManifestFile.create(
           @params.ctl_bucket,
