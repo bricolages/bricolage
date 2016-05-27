@@ -48,6 +48,7 @@ module Bricolage
 
         Process.daemon(true) if opts.daemon?
         create_pid_file opts.pid_file_path if opts.pid_file_path
+        dispatcher.set_processflush_timer
         dispatcher.event_loop
       end
 
@@ -67,7 +68,6 @@ module Bricolage
       end
 
       def event_loop
-        set_processflush_timer
         @event_queue.main_handler_loop(handlers: self, message_class: Event)
       end
 
@@ -103,9 +103,9 @@ module Bricolage
       end
 
       def handle_processflush(e)
+        @event_queue.delete_message(e)
         load_tasks = @object_buffer.process_flush
         load_tasks.each {|load_task| delete_events(load_task.source_events) }
-        @event_queue.delete_message(e)
         set_processflush_timer
       end
 
