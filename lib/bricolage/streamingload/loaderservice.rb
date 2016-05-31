@@ -22,7 +22,7 @@ module Bricolage
 
         config = YAML.load(File.read(config_path))
 
-        ctx = Context.for_application('.')
+        ctx = Context.for_application('.', environment: opts.environment)
         redshift_ds = ctx.get_data_source('sql', config.fetch('redshift-ds'))
         task_queue = ctx.get_data_source('sqs', config.fetch('task-queue-ds'))
 
@@ -93,6 +93,9 @@ module Bricolage
         opts.on('--task-id=ID', 'Execute oneshot load task (implicitly disables daemon mode).') {|task_id|
           @task_id = task_id
         }
+        opts.on('-e', '--environment=NAME', "Sets execution environment [default: #{Context::DEFAULT_ENV}]") {|env|
+          @environment = env
+        }
         opts.on('--daemon', 'Becomes daemon in server mode.') {
           @daemon = true
         }
@@ -120,7 +123,7 @@ module Bricolage
         raise OptionError, err.message
       end
 
-      attr_reader :rest_arguments
+      attr_reader :rest_arguments, :environment
       attr_reader :task_id
 
       def daemon?
