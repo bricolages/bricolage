@@ -109,7 +109,8 @@ module Bricolage
       end
 
       def handle_flush(e)
-        @object_buffer[e.table_name].request_flush
+        # might be nil in rare case ( stop -> del job file -> start )
+        @object_buffer[e.table_name].request_flush if @object_buffer[e.table_name]
         @event_queue.delete_message(e)
       end
 
