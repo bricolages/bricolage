@@ -28,7 +28,7 @@ module Bricolage
 
     def client
       @client ||= begin
-        c = @noop ? DummySQSClient.new : Aws::SQS::Client.new(region: @region, access_key_id: @access_key, secret_access_key: @secret_key)
+        c = @noop ? DummySQSClient.new : Aws::SQS::Client.new(region: @region, access_key_id: @access_key_id, secret_access_key: @secret_access_key)
         SQSClientWrapper.new(c, logger: logger)
       end
     end

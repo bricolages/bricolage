@@ -45,7 +45,7 @@ module Bricolage
         end
       end
 
-      def Dispatcher.set_log_path(path)
+      def LoaderService.set_log_path(path)
         FileUtils.mkdir_p File.dirname(path)
         # make readable for retrieve_last_match_from_stderr
         File.open(path, 'w+') {|f|
