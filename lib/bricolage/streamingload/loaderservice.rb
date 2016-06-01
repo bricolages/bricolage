@@ -39,9 +39,19 @@ module Bricolage
         else
           # Server mode
           Process.daemon(true) if opts.daemon?
+          set_log_file opts.log_file_path if opts.log_file_path
           create_pid_file opts.pid_file_path if opts.pid_file_path
           service.event_loop
         end
+      end
+
+      def Dispatcher.set_log_path(path)
+        FileUtils.mkdir_p File.dirname(path)
+        # make readable for retrieve_last_match_from_stderr
+        File.open(path, 'w+') {|f|
+          $stdout.reopen f
+          $stderr.reopen f
+        }
       end
 
       def LoaderService.create_pid_file(path)
@@ -86,6 +96,7 @@ module Bricolage
         @argv = argv
         @task_id = nil
         @daemon = false
+        @log_file_path = nil
         @pid_file_path = nil
         @rest_arguments = nil
 
@@ -98,6 +109,9 @@ module Bricolage
         }
         opts.on('--daemon', 'Becomes daemon in server mode.') {
           @daemon = true
+        }
+        opts.on('--log-file=PATH', 'Log file path') {|path|
+          @log_file_path = path
         }
         opts.on('--pid-file=PATH', 'Creates PID file.') {|path|
           @pid_file_path = path
@@ -123,7 +137,7 @@ module Bricolage
         raise OptionError, err.message
       end
 
-      attr_reader :rest_arguments, :environment
+      attr_reader :rest_arguments, :environment, :log_file_path
       attr_reader :task_id
 
       def daemon?

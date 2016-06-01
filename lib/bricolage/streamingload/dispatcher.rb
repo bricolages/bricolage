@@ -7,6 +7,7 @@ require 'bricolage/streamingload/urlpatterns'
 require 'aws-sdk'
 require 'yaml'
 require 'optparse'
+require 'fileutils'
 
 module Bricolage
 
@@ -48,8 +49,18 @@ module Bricolage
 
         Process.daemon(true) if opts.daemon?
         create_pid_file opts.pid_file_path if opts.pid_file_path
+        set_log_path opts.log_file_path if opts.log_file_path
         dispatcher.set_processflush_timer
         dispatcher.event_loop
+      end
+
+      def Dispatcher.set_log_path(path)
+        FileUtils.mkdir_p File.dirname(path)
+        # make readable for retrieve_last_match_from_stderr
+        File.open(path, 'w+') {|f|
+          $stdout.reopen f
+          $stderr.reopen f
+        }
       end
 
       def Dispatcher.create_pid_file(path)
@@ -127,6 +138,7 @@ module Bricolage
       def initialize(argv)
         @argv = argv
         @daemon = false
+        @log_file_path = nil
         @pid_file_path = nil
         @rest_arguments = nil
 
@@ -139,6 +151,9 @@ module Bricolage
         }
         opts.on('--daemon', 'Becomes daemon in server mode.') {
           @daemon = true
+        }
+        opts.on('--log-file=PATH', 'Log file path') {|path|
+          @log_file_path = path
         }
         opts.on('--pid-file=PATH', 'Creates PID file.') {|path|
           @pid_file_path = path
@@ -164,7 +179,7 @@ module Bricolage
         raise OptionError, err.message
       end
 
-      attr_reader :rest_arguments, :environment
+      attr_reader :rest_arguments, :environment, :log_file_path
 
       def daemon?
         @daemon
