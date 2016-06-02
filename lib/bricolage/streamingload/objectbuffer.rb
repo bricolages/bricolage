@@ -42,9 +42,10 @@ module Bricolage
 
       include SQLUtils
 
-      def initialize(task_queue:, data_source:, default_buffer_size_limit: 500, default_load_interval: 600, process_flush_interval: 60, context:)
+      def initialize(task_queue:, data_source:, control_data_source:, default_buffer_size_limit: 500, default_load_interval: 600, process_flush_interval: 600, context:)
         @task_queue = task_queue
         @ds = data_source
+        @ctl_ds = control_data_source
         @default_buffer_size_limit = default_buffer_size_limit
         @default_load_interval = default_load_interval
         @process_flush_interval = process_flush_interval
@@ -98,11 +99,9 @@ module Bricolage
             tasks.each do |task|
               task.seq = write_task(conn, task)
             end
-            tasks.each do |task|
-              task.objects.each do |obj|
-                write_task_file(conn, task.seq, obj)
-              end
-            end
+            ObjectListFile.create(@ctl_ds, tasks, @logger) {|object_list|
+              load_objects(conn, object_list)
+            }
           }
         }
       end
@@ -139,24 +138,64 @@ module Bricolage
         dwh_task_seq
       end
 
-      def write_task_file(conn, dwh_task_seq, obj)
-        conn.update(<<-EndSQL)
-            insert into dwh_str_load_files_incoming
-                ( dwh_task_seq
-                , object_url
-                , message_id
-                , receipt_handle
-                , utc_event_time
-                )
-            values
-                ( #{dwh_task_seq}
-                , #{s obj.url}
-                , #{s obj.message_id}
-                , #{s obj.receipt_handle}
-                , #{t obj.event_time}
-                )
+      def load_objects(conn, object_list)
+        conn.execute(<<-EndSQL.strip.gsub(/\s+/, ' '))
+            copy dwh_str_load_files_incoming
+            from '#{object_list.url}'
+            credentials '#{object_list.credential_string}'
+            format csv
+            statupdate false
+            compupdate false
             ;
         EndSQL
+        @logger.info "load succeeded: #{object_list.url}"
+      end
+
+      class ObjectListFile
+        def ObjectListFile.create(ds, tasks, logger, &block)
+          list = new(ds, tasks, logger)
+          list.create_temporary(&block)
+        end
+
+        def initialize(ds, tasks, logger)
+          @ds = ds
+          @tasks = tasks
+          @logger = logger
+        end
+
+        def credential_string
+          @ds.credential_string
+        end
+
+        def name
+          @name ||= "object-list-#{$$}-#{@tasks.first.seq}-#{@tasks.last.seq}.csv"
+        end
+
+        def url
+          @url ||= @ds.url(name)
+        end
+
+        def content
+          @content ||= @tasks.map {|t|
+            t.objects.map {|o| "#{t.seq},#{o.url},#{o.message_id},#{o.receipt_handle},#{o.event_time}"}
+          }.flatten.join("\n")
+        end
+
+        def put
+          @logger.info "s3: put: #{url}"
+          @ds.object(name).put(body: content)
+        end
+
+        def delete
+          @logger.info "s3: delete: #{url}"
+          @ds.object(name).delete
+        end
+
+        def create_temporary
+          put
+          yield self
+          delete
+        end
       end
 
     end

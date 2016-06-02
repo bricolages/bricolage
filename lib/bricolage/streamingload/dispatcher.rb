@@ -32,6 +32,7 @@ module Bricolage
         object_buffer = ObjectBuffer.new(
           task_queue: task_queue,
           data_source: ctx.get_data_source('sql', 'sql'),
+          control_data_source: ctx.get_data_source('s3', config.fetch('ctl-ds')),
           default_buffer_size_limit: 500,
           default_load_interval: 300,
           process_flush_interval: 60,
