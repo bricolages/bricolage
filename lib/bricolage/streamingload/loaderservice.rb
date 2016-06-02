@@ -19,6 +19,7 @@ module Bricolage
           exit 1
         end
         config_path, * = opts.rest_arguments
+        set_log_path opts.log_file_path if opts.log_file_path
 
         config = YAML.load(File.read(config_path))
 
@@ -39,7 +40,6 @@ module Bricolage
         else
           # Server mode
           Process.daemon(true) if opts.daemon?
-          set_log_file opts.log_file_path if opts.log_file_path
           create_pid_file opts.pid_file_path if opts.pid_file_path
           service.event_loop
         end

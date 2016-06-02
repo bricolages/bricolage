@@ -23,6 +23,7 @@ module Bricolage
           exit 1
         end
         config_path, * = opts.rest_arguments
+        set_log_path opts.log_file_path if opts.log_file_path
 
         config = YAML.load(File.read(config_path))
         ctx = Context.for_application('.', environment: opts.environment)
@@ -50,7 +51,6 @@ module Bricolage
 
         Process.daemon(true) if opts.daemon?
         create_pid_file opts.pid_file_path if opts.pid_file_path
-        set_log_path opts.log_file_path if opts.log_file_path
         dispatcher.set_processflush_timer
         dispatcher.event_loop
       end
