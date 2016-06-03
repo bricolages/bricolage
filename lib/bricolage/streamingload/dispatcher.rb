@@ -35,7 +35,7 @@ module Bricolage
           data_source: ctx.get_data_source('sql', 'sql'),
           control_data_source: ctx.get_data_source('s3', config.fetch('ctl-ds')),
           default_buffer_size_limit: 500,
-          default_load_interval: 300,
+          default_load_interval: 1200, -- 20min
           process_flush_interval: 60,
           context: ctx
         )
