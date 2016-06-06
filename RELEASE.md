@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.16.5
+
+- [fix] my-import: mys3dump: Fixes buffer size problem.
+- [fix] my-import: mys3dump: Escapes more meta characters (e.g. \n, \r, \v, ...).
+
 ## version 5.16.4
 
 - [fix] Adds dependency to rake
