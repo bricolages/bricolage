@@ -75,23 +75,27 @@ JobClass.define('my-migrate') {
         prev_table = '${dest_table}_old'
         work_table = '${dest_table}_wk'
 
-        # CREATE
-        task.drop_force prev_table
-        task.drop_force work_table
-        task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
+        task.transaction {
+          # CREATE
+          task.drop_force prev_table
+          task.drop_force work_table
+          task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
 
-        # COPY
-        task.load params['s3-ds'], params['s3-file'], work_table,
-            'json', nil, params['options'].merge('gzip' => params['gzip'])
+          # COPY
+          task.load params['s3-ds'], params['s3-file'], work_table,
+              'json', nil, params['options'].merge('gzip' => params['gzip'])
 
-        # VACUUM, ANALYZE, GRANT
+          # GRANT
+          task.grant_if params['grant'], work_table
+        }
+
+        # VACUUM, ANALYZE
         task.vacuum_if params['vacuum'], params['vacuum-sort'], work_table
         task.analyze_if params['analyze'], work_table
-        task.grant_if params['grant'], work_table
 
         # RENAME
-        task.create_dummy_table '${dest_table}'
         task.transaction {
+          task.create_dummy_table '${dest_table}'
           task.rename_table params['dest-table'].to_s, "#{params['dest-table'].name}_old"
           task.rename_table work_table, params['dest-table'].name
         }
