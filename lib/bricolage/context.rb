@@ -1,5 +1,6 @@
 require 'bricolage/filesystem'
 require 'bricolage/datasource'
+require 'bricolage/variables'
 require 'bricolage/configloader'
 require 'bricolage/logger'
 require 'forwardable'
