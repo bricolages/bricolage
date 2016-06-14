@@ -14,9 +14,11 @@ JobClass.define('createview') {
 
   script {|params, script|
     script.task(params['data-source']) {|task|
-      task.drop_view_force_if params['drop']
-      task.exec params['sql-file']
-      task.grant_if params['grant'], params['dest-table']
+      task.transaction {
+        task.drop_view_force_if params['drop']
+        task.exec params['sql-file']
+        task.grant_if params['grant'], params['dest-table']
+      }
     }
   }
 }
