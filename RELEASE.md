@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.6
+
+- rebuild-rename, rebuild-drop, my-import, my-migrate, create, createview: Reduces the number of transactions for speed.
+
 ## version 5.16.5
 
 - [fix] my-import: mys3dump: Fixes buffer size problem.

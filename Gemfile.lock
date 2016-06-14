@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    bricolage (5.16.5)
+    bricolage (5.16.6)
       aws-sdk (~> 2)
       mysql2
       pg
