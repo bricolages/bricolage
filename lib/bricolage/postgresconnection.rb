@@ -125,9 +125,7 @@ module Bricolage
     end
 
     def drop_table_force(name)
-      drop_table name
-    rescue PostgreSQLException => err
-      @logger.error err.message
+      execute "drop table if exists #{name} cascade;"
     end
 
     def vacuum(table)
