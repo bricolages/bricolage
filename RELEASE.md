@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.16.7
+
+- [fix] require 'bricolage/context' wrongly caused NameError.
+- [new] PostgresConnection#drop_table_force utilizes DROP TABLE IF EXISTS.
+
 ## version 5.16.6
 
 - rebuild-rename, rebuild-drop, my-import, my-migrate, create, createview: Reduces the number of transactions for speed.
