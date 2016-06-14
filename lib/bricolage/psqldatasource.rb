@@ -218,9 +218,7 @@ module Bricolage
 
     def create_dummy_table(target)
       exec SQLStatement.for_string(
-        "\\set ON_ERROR_STOP false\n" +
-        "create table #{target} (x int);\n" +
-        "\\set ON_ERROR_STOP true\n"
+        "create table if not exists #{target} (x int);\n"
       )
     end
 
@@ -234,9 +232,7 @@ module Bricolage
 
     def drop_obj_force(type, name)
       exec SQLStatement.for_string(
-        "\\set ON_ERROR_STOP false\n" +
-        "drop #{type} #{name} cascade;\n" +
-        "\\set ON_ERROR_STOP true\n"
+        "drop #{type} if exists #{name} cascade;\n"
       )
     end
 

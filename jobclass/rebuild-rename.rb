@@ -24,22 +24,26 @@ JobClass.define('rebuild-rename') {
       prev_table = '${dest_table}_old'
       work_table = '${dest_table}_wk'
 
-      # CREATE
-      task.drop_force prev_table
-      task.drop_force work_table
-      task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
+      task.transaction {
+        # CREATE
+        task.drop_force prev_table
+        task.drop_force work_table
+        task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
 
-      # INSERT
-      task.exec params['sql-file'].replace(/\$\{?dest_table\}?\b/, work_table)
+        # INSERT
+        task.exec params['sql-file'].replace(/\$\{?dest_table\}?\b/, work_table)
 
-      # VACUUM, ANALYZE, GRANT
+        # GRANT
+        task.grant_if params['grant'], work_table
+      }
+
+      # VACUUM, ANALYZE
       task.vacuum_if params['vacuum'], params['vacuum-sort'], work_table
       task.analyze_if params['analyze'], work_table
-      task.grant_if params['grant'], work_table
 
       # RENAME
-      task.create_dummy_table '$dest_table'
       task.transaction {
+        task.create_dummy_table '$dest_table'
         dest_table = params['dest-table']
         task.rename_table dest_table.to_s, "#{dest_table.name}_old"
         task.rename_table "#{dest_table}_wk", dest_table.name

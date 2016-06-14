@@ -14,10 +14,12 @@ JobClass.define('create') {
 
   script {|params, script|
     script.task(params['data-source']) {|task|
-      task.drop_force_if params['drop']
-      task.exec params['table-def']
-      task.analyze_if params['analyze']
-      task.grant_if params['grant'], params['dest-table']
+      task.transaction {
+        task.drop_force_if params['drop']
+        task.exec params['table-def']
+        task.analyze_if params['analyze']
+        task.grant_if params['grant'], params['dest-table']
+      }
     }
   }
 }
