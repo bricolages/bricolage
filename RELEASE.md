@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.8
+
+- code-level change only
+
 ## version 5.16.7
 
 - [fix] require 'bricolage/context' wrongly caused NameError.

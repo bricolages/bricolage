@@ -4,8 +4,8 @@ Gem::Specification.new do |s|
   s.platform = Gem::Platform::RUBY
   s.name = 'bricolage'
   s.version = Bricolage::VERSION
-  s.summary = 'SQL batch framework'
-  s.description = 'SQL batch framework'
+  s.summary = 'SQL Batch Framework'
+  s.description = 'Redshift-oriented Data Warehouse Batch Framework'
   s.license = 'MIT'
 
   s.author = ['Minero Aoki']
