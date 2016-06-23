@@ -4,12 +4,14 @@ require 'logger'
 module Bricolage
   class Logger < ::Logger
     def Logger.default
-      shifting
+      @default ||= new
     end
 
-    def Logger.shifting(age: 0, size: 1048570)
-      logger = new($stderr, age, size)
-      logger.level = $stderr.tty? ? Logger::DEBUG : Logger::INFO
+    DEFAULT_ROTATION_SIZE = 1024 ** 2 * 100   # 100MB
+
+    def Logger.new(device: $stderr, rotation_period: nil, rotation_size: DEFAULT_ROTATION_SIZE)
+      logger = super(device, (rotation_period || 0), rotation_size)
+      logger.level = (device == $stderr && $stderr.tty?) ? Logger::DEBUG : Logger::INFO
       logger.formatter = -> (sev, time, prog, msg) {
         "#{time}: #{sev}: #{msg}\n"
       }
