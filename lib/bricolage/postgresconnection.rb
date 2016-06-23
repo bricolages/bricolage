@@ -17,13 +17,13 @@ module Bricolage
     end
 
     def execute_update(query)
-      @logger.info "[#{@ds.name}] #{query}"
-      log_elapsed_time {
-        rs = @connection.exec(query)
-        result = rs.to_a
-        rs.clear
-        result
+      log_query query
+      rs = log_elapsed_time {
+        @connection.exec(query)
       }
+      result = rs.to_a
+      rs.clear
+      result
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
     end
@@ -35,8 +35,21 @@ module Bricolage
       execute_query("select * from #{table}", &block)
     end
 
+    def query_value(query)
+      row = query_row(query)
+      row ? row.values.first : nil
+    end
+
+    def query_values(query)
+      execute_query(query) {|rs| rs.to_a }.flat_map {|rec| rec.values }
+    end
+
+    def query_row(query)
+      execute_query(query) {|rs| rs.to_a.first }
+    end
+
     def execute_query(query, &block)
-      @logger.info "[#{@ds.name}] #{query}"
+      log_query query
       rs = log_elapsed_time {
         @connection.exec(query)
       }
@@ -56,7 +69,7 @@ module Bricolage
     end
 
     def streaming_execute_query(query, &block)
-      @logger.info "[#{@ds.name}] #{query}"
+      log_query query
       log_elapsed_time {
         @connection.send_query(query)
       }
@@ -79,8 +92,40 @@ module Bricolage
 
     def transaction
       execute 'begin transaction'
-      yield
-      execute 'commit'
+      txn = Transaction.new(self)
+      begin
+        yield txn
+      rescue
+        begin
+          txn.abort unless txn.committed?
+        rescue => ex
+          @logger.error "SQL error on transaction abort: #{ex.message} (ignored)"
+        end
+        raise
+      ensure
+        txn.commit unless txn.committed?
+      end
+    end
+
+    class Transaction
+      def initialize(conn)
+        @conn = conn
+        @committed = false
+      end
+
+      def committed?
+        @committed
+      end
+
+      def commit
+        @conn.execute 'commit'
+        @committed = true
+      end
+
+      def abort
+        @conn.execute 'abort'
+        @committed = true
+      end
     end
 
     def open_cursor(query, name = nil, &block)
@@ -140,7 +185,18 @@ module Bricolage
       execute "analyze #{table};"
     end
 
-    private
+    def lock(table)
+      execute("lock #{table}")
+    end
+
+    def log_query(query)
+      @logger.info "[#{@ds.name}] #{mask_secrets query}"
+    end
+
+    def mask_secrets(msg)
+      msg.gsub(/\bcredentials\s+'.*?'/mi, "credentials '****'")
+    end
+    private :mask_secrets
 
     def log_elapsed_time
       b = Time.now
@@ -150,6 +206,7 @@ module Bricolage
       t = e - b
       @logger.info "#{'%.1f' % t} secs"
     end
+
   end
 
 end
