@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.16.9
+
+- code-level change only: [new] new method Transaction#truncate_and_commit
+
 ## version 5.16.8
 
 - code-level change only
