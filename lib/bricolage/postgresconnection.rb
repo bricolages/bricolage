@@ -126,6 +126,11 @@ module Bricolage
         @conn.execute 'abort'
         @committed = true
       end
+
+      def truncate_and_commit(table)
+        @conn.execute "truncate #{table}"
+        @committed = true
+      end
     end
 
     def open_cursor(query, name = nil, &block)
