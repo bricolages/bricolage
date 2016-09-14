@@ -1,5 +1,6 @@
 require 'bricolage/datasource'
 require 'bricolage/commandutils'
+require 'bricolage/exception'
 require 'aws-sdk'
 require 'stringio'
 
@@ -29,8 +30,8 @@ module Bricolage
       @iam_role = iam_role
       @master_symmetric_key = master_symmetric_key
       @encryption = encryption
-      @s3cfg = s3cfg
-      @configurations = @s3cfg ? load_configurations(@s3cfg) : nil
+      @s3cfg_path = s3cfg
+      @s3cfg = @s3cfg_path ? load_s3cfg(@s3cfg_path) : nil
     end
 
     attr_reader :endpoint
@@ -42,32 +43,42 @@ module Bricolage
       S3Task.new(self)
     end
 
-    # For Redshift
+    # For Redshift COPY/UNLOAD
     def credential_string
       if @iam_role
         "aws_iam_role=#{@iam_role}"
-      else
+      elsif access_key
         [
           "aws_access_key_id=#{access_key}",
           "aws_secret_access_key=#{secret_key}",
           (@master_symmetric_key && "master_symmetric_key=#{@master_symmetric_key}")
         ].compact.join(';')
+      else
+        raise ParameterError, "[s3:#{@bucket_name}] credential string requested but no credentials exist"
       end
     end
 
+    # AWS access key ID.
+    # This property may be nil, we can use EC2 instance or ECS task attached IAM role in that case.
     def access_key
-      @access_key_id || get_config('access_key')
+      @access_key_id || get_s3cfg('access_key')
     end
 
+    # AWS secret access key.
     def secret_key
-      @secret_access_key || get_config('secret_key')
+      @secret_access_key || get_s3cfg('secret_key')
     end
 
-    def get_config(key)
-      @configurations[key] or raise ParameterError, "missing s3cfg entry: #{key}"
-    end
+    # Redshift attached IAM role ARN
+    attr_reader :iam_role
 
-    def load_configurations(path)
+    def get_s3cfg(key)
+      return nil unless @s3cfg
+      @s3cfg[key] or raise ParameterError, "[s3:#{@bucket_name}] missing s3cfg entry: #{key}"
+    end
+    private :get_s3cfg
+
+    def load_s3cfg(path)
       h = {}
       File.foreach(path) do |line|
         case line
@@ -79,6 +90,7 @@ module Bricolage
       end
       h
     end
+    private :load_s3cfg
 
     attr_reader :encryption
 
