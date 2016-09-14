@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.17.0
+
+- [new] Supports Redshfit attached IAM role for COPY and UNLOAD.
+
 ## version 5.16.9
 
 - code-level change only: [new] new method Transaction#truncate_and_commit
