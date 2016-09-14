@@ -11,16 +11,22 @@ module Bricolage
     def initialize(
         endpoint: 's3-ap-northeast-1.amazonaws.com',
         region: 'ap-northeast-1',
-        bucket: nil, prefix: nil,
-        access_key_id: nil, secret_access_key: nil, master_symmetric_key: nil,
+        bucket: nil,
+        prefix: nil,
+        access_key_id: nil,
+        secret_access_key: nil,
+        iam_role: nil,
+        master_symmetric_key: nil,
         encryption: nil,
-        s3cfg: nil)
+        s3cfg: nil
+    )
       @endpoint = (/\Ahttps?:/ =~ endpoint) ? endpoint : "https://#{endpoint}"
       @region = region
       @bucket_name = bucket
       @prefix = (prefix && prefix.empty?) ? nil : prefix
       @access_key_id = access_key_id
       @secret_access_key = secret_access_key
+      @iam_role = iam_role
       @master_symmetric_key = master_symmetric_key
       @encryption = encryption
       @s3cfg = s3cfg
@@ -38,11 +44,15 @@ module Bricolage
 
     # For Redshift
     def credential_string
-      [
-        "aws_access_key_id=#{access_key}",
-        "aws_secret_access_key=#{secret_key}",
-        (@master_symmetric_key && "master_symmetric_key=#{@master_symmetric_key}")
-      ].compact.join(';')
+      if @iam_role
+        "aws_iam_role=#{@iam_role}"
+      else
+        [
+          "aws_access_key_id=#{access_key}",
+          "aws_secret_access_key=#{secret_key}",
+          (@master_symmetric_key && "master_symmetric_key=#{@master_symmetric_key}")
+        ].compact.join(';')
+      end
     end
 
     def access_key
