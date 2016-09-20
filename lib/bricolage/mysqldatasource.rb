@@ -219,6 +219,11 @@ module Bricolage
         @statement.bind(*args) if @statement
       end
 
+      def source
+        "-- myexport #{@table} -> #{@s3ds.bucket_name}/#{@prefix}" +
+          (@statement ? "\n#{@statement.stripped_source}" : "")
+      end
+
       def s3export
         cmd = build_cmd(command_parameters)
         ds.logger.info '[CMD] ' + cmd.join(' ')
