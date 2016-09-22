@@ -5,24 +5,21 @@ require 'pathname'
 module Bricolage
 
   class FileSystem
-    def FileSystem.for_option_pathes(home_path, job_path, env)
-      if job_path
-        home, subsys_id = extract_home_dirs(job_path)
-        if home_path and home_path.realpath.to_s != home.realpath.to_s
-          raise OptionError, "--home option and job file is exclusive"
-        end
-        new(home, env).subsystem(subsys_id)
-      elsif home_path
-        new(home_path, env)
-      elsif home = ENV['BRICOLAGE_HOME']
-        new(home, env)
-      else
-        new(Pathname.getwd, env)
-      end
+    def FileSystem.home_path(opt_path = nil)
+      Pathname(opt_path || ENV['BRICOLAGE_HOME'] || Dir.getwd)
+    end
+
+    def FileSystem.for_options(home, env)
+      new(home_path(home), env)
+    end
+
+    def FileSystem.for_job_path(job_path, env)
+      home, subsys_id = parse_job_path(job_path)
+      new(home, env).subsystem(subsys_id)
     end
 
     # job_path -> [home_path, subsys_id]
-    def FileSystem.extract_home_dirs(job_path)
+    def FileSystem.parse_job_path(job_path)
       subsys_path = Pathname(job_path).realpath.parent
       return subsys_path.parent, subsys_path.basename
     rescue SystemCallError => err

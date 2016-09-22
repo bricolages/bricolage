@@ -3,6 +3,7 @@ require 'bricolage/datasource'
 require 'bricolage/variables'
 require 'bricolage/configloader'
 require 'bricolage/logger'
+require 'bricolage/exception'
 require 'forwardable'
 
 module Bricolage
@@ -10,13 +11,24 @@ module Bricolage
   class Context
     DEFAULT_ENV = 'development'
 
-    def Context.environment(opt_env)
+    def Context.environment(opt_env = nil)
       opt_env || ENV['BRICOLAGE_ENV'] || DEFAULT_ENV
     end
 
-    def Context.for_application(home_path, job_path = nil, environment: nil, global_variables: nil, logger: nil)
+    def Context.home_path(opt_path = nil)
+      FileSystem.home_path(opt_path)
+    end
+
+    def Context.for_application(home_path = nil, job_path_0 = nil, job_path: nil, environment: nil, global_variables: nil, logger: nil)
       env = environment(environment)
-      fs = FileSystem.for_option_pathes(home_path, job_path, env)
+      if (job_path ||= job_path_0)
+        fs = FileSystem.for_job_path(job_path, env)
+        if home_path and home_path.realpath.to_s != fs.home_path.realpath.to_s
+          raise OptionError, "--home option and job file is exclusive"
+        end
+      else
+        fs = FileSystem.for_options(home_path, env)
+      end
       load(fs, env, global_variables: global_variables, logger: logger)
     end
 
