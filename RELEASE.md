@@ -1,8 +1,13 @@
 # Bricolage Release Note
 
+## version 5.17.1
+
+- [fix] --dry-run option did not work for my-import job class.
+- [new] AWS access key id & secret key are now optional for S3 data sources (to allow using EC2 instance or ECS task attached IAM role)
+
 ## version 5.17.0
 
-- [new] Supports Redshfit attached IAM role for COPY and UNLOAD.
+- [new] Supports Redshift attached IAM role for COPY and UNLOAD.
 
 ## version 5.16.9
 
