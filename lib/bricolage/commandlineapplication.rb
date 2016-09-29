@@ -67,7 +67,7 @@ module Bricolage
     end
 
     def create_context
-      Bricolage::Context.for_application(@home, @env)
+      Bricolage::Context.for_application(@home, environment: @env)
     end
 
     def main
