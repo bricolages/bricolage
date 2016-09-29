@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.17.2
+
+- [fix] Using CommandLineApplication with --environment option causes unexpected option error
+
 ## version 5.17.1
 
 - [fix] --dry-run option did not work for my-import job class.
