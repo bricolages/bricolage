@@ -178,7 +178,7 @@ module Bricolage
       buf.puts '\timing on'
       each_statement do |stmt|
         buf.puts
-        buf.puts "-- #{stmt.location}" if stmt.location
+        buf.puts "/* #{stmt.location} */" if stmt.location
         buf.puts stmt.stripped_source
       end
       buf.string
