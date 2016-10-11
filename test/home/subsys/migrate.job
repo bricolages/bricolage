@@ -1,5 +1,5 @@
 class: my-migrate
-src-ds: mysql
+src-ds: cookpad_main_db
 src-tables:
     search_backends: main.search_backends
 tmp-file: $data_dir/search_backends.json.gz
@@ -12,6 +12,7 @@ remove-tmp: true
 dest-ds: sql
 dest-table: $test_schema.search_backends
 table-def: search_backends.ct
+no-backup: true
 options:
     statupdate: false
     compupdate: false

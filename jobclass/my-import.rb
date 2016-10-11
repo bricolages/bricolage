@@ -18,6 +18,7 @@ JobClass.define('my-import') {
         optional: true, default: PSQLLoadOptions.new,
         value_handler: lambda {|value, ctx, vars| PSQLLoadOptions.parse(value) })
     params.add SQLFileParam.new('table-def', 'PATH', 'Create table file.')
+    params.add OptionalBoolParam.new('no-backup', 'Do not backup current table with prefix "_old".', default: false)
 
     # Misc
     params.add OptionalBoolParam.new('analyze', 'ANALYZE table after SQL is executed.', default: true)
@@ -55,7 +56,7 @@ JobClass.define('my-import') {
 
         task.transaction {
           # CREATE
-          task.drop_force prev_table
+          task.drop_force prev_table unless params['no-backup']
           task.drop_force work_table
           task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
 
@@ -73,8 +74,12 @@ JobClass.define('my-import') {
 
         # RENAME
         task.transaction {
-          task.create_dummy_table '${dest_table}'
-          task.rename_table params['dest-table'].to_s, "#{params['dest-table'].name}_old"
+          if params['no-backup']
+            task.drop_force params['dest-table'].to_s
+          else
+            task.create_dummy_table '${dest_table}'
+            task.rename_table params['dest-table'].to_s, "#{params['dest-table'].name}_old"
+          end
           task.rename_table work_table, params['dest-table'].name
         }
       }
