@@ -1,5 +1,5 @@
 class: my-migrate
-src-ds: cookpad_main_db
+src-ds: mysql
 src-tables:
     search_backends: main.search_backends
 tmp-file: $data_dir/search_backends.json.gz
