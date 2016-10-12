@@ -76,34 +76,34 @@ JobClass.define('my-migrate') {
         prev_table = '${dest_table}_old'
         work_table = '${dest_table}_wk'
 
-        load_target_table = params['no-backup'] ? '${dest_table}' : work_table
-
-        task.drop_force prev_table
         task.transaction {
-          # create
+          # CREATE
           task.drop_force prev_table
-          task.drop_force load_target_table
-          task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, load_target_table)
+          task.drop_force work_table
+          task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
 
-          # copy
-          task.load params['s3-ds'], params['s3-file'], load_target_table,
+          # COPY
+          task.load params['s3-ds'], params['s3-file'], work_table,
               'json', nil, params['options'].merge('gzip' => params['gzip'])
 
-          # grant
-          task.grant_if params['grant'], load_target_table
+          # GRANT
+          task.grant_if params['grant'], work_table
         }
 
-        # vacuum, analyze
-        task.vacuum_if params['vacuum'], params['vacuum-sort'], load_target_table
-        task.analyze_if params['analyze'], load_target_table
+        # VACUUM, ANALYZE
+        task.vacuum_if params['vacuum'], params['vacuum-sort'], work_table
+        task.analyze_if params['analyze'], work_table
 
-        unless params['no-backup']
-          task.transaction {
+        # RENAME
+        task.transaction {
+          if params['no-backup']
+            task.drop_force params['dest-table'].to_s
+          else
             task.create_dummy_table '${dest_table}'
             task.rename_table params['dest-table'].to_s, "#{params['dest-table'].name}_old"
-            task.rename_table work_table, params['dest-table'].name
-          }
-        end
+          end
+          task.rename_table work_table, params['dest-table'].name
+        }
       }
     end
   }
