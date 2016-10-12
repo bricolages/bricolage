@@ -14,6 +14,7 @@ dump-options:
 dest-ds: sql
 dest-table: $test_schema.users
 table-def: users.ct
+#no-backup: true
 options:
     statupdate: false
     compupdate: false

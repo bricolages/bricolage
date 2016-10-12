@@ -12,6 +12,7 @@ remove-tmp: true
 dest-ds: sql
 dest-table: $test_schema.search_backends
 table-def: search_backends.ct
+no-backup: true
 options:
     statupdate: false
     compupdate: false
