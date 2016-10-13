@@ -1,5 +1,12 @@
 # Bricolage Release Note
 
+## version 5.18.0
+
+- [new] New parameter "no-backup" for my-import and my-migrate job classes.
+- [new] New parameter "sql_log_level" for the psql data source.
+- [new] Shows SQL source location before the query.
+- Raises ConnectionError for all connection-level problems, while it raises SQLError for SQL-level errors.
+
 ## version 5.17.2
 
 - [fix] Using CommandLineApplication with --environment option causes unexpected option error
