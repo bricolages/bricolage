@@ -33,6 +33,9 @@ module Bricolage
   # S3 related exceptions
   class S3Exception < JobFailureByException; end
 
+  # SNS related exceptions
+  class SNSException < JobFailureByException; end
+
   # Job error.
   # This exception should NOT be thrown in production environment.
   # You must fix source code or configuration not to be get this exception.
