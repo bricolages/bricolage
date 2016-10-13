@@ -1,19 +1,15 @@
 module Bricolage
 
-  ##
-  # Common super-class of handlable bricolage exceptions
+  # Common super class of handleable Bricolage exceptions
   class ApplicationError < StandardError; end
 
-  ##
   # Job failure.
   # This exception may occur in production environment and is temporary.
   # e.g. Source data error, SQL error
   class JobFailure < ApplicationError; end
 
-  ##
-  # various SQL exception
-  class SQLException < JobFailure
-    def SQLException.wrap(ex)
+  class JobFailureByException < JobFailure
+    def JobFailureByException.wrap(ex)
       new(ex.message, ex)
     end
 
@@ -25,26 +21,27 @@ module Bricolage
     attr_reader :original
   end
 
-  ##
+  # Various SQL exception, except connection problem.
+  class SQLException < JobFailureByException; end
+
+  # Database connection problems (not established, closed unexpectedly, invalid state)
+  class ConnectionError < JobFailureByException; end
+
   # Aquiring lock takes too long (e.g. VACUUM lock)
   class LockTimeout < JobFailure; end
 
-  ##
   # Job error.
   # This exception should NOT be thrown in production environment.
-  # Developer must fix source code or configuration, not to be get this exception.
+  # You must fix source code or configuration not to be get this exception.
   class JobError < ApplicationError; end
 
-  ##
   # Command-line option errors (should NOT be thrown in production environment)
   class OptionError < JobError; end
 
-  ##
   # User parameter errors (should NOT be thrown in production environment)
   class ParameterError < JobError; end
 
-  ##
-  # Bad code in bricolage core or job classes.
+  # Bad code in Bricolage core or job classes.
   # This exception should NOT be thrown in ANY user environment.
   class FatalError < Exception; end
 

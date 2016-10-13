@@ -96,10 +96,7 @@ module Bricolage
     end
 
     def open(&block)
-      conn = PG::Connection.open(host: @host, port: @port, dbname: @database, user: @user, password: password)
-      yield PostgresConnection.new(conn, self, logger)
-    ensure
-      conn.close if conn
+      PostgresConnection.open_data_source(self, &block)
     end
 
     def query_batch(query, batch_size = 5000, &block)

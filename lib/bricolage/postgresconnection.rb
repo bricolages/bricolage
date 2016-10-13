@@ -6,14 +6,52 @@ module Bricolage
   class PostgreSQLException < SQLException; end
 
   class PostgresConnection
+
+    def PostgresConnection.open_data_source(ds)
+      conn = _open_ds(ds)
+      if block_given?
+        begin
+          yield conn
+        ensure
+          conn.close_force
+        end
+      else
+        return conn
+      end
+    end
+
+    def PostgresConnection._open_ds(ds)
+      conn = PG::Connection.open(host: ds.host, port: ds.port, dbname: ds.database, user: ds.user, password: ds.password)
+      new(conn, ds, ds.logger)
+    rescue PG::ConnectionBad, PG::UnableToSend => ex
+      raise ConnectionError.wrap(ex)
+    end
+    private_class_method :_open_ds
+
     def initialize(connection, ds, logger)
       @connection = connection
       @ds = ds
       @logger = logger
+      @closed = false
+      @connection_failed = false
     end
 
     def source
       @connection
+    end
+
+    def close
+      @connection.close
+      @closed = true
+    end
+
+    def close_force
+      close
+    rescue
+    end
+
+    def closed?
+      @closed
     end
 
     def execute_update(query)
@@ -24,6 +62,9 @@ module Bricolage
       result = rs.to_a
       rs.clear
       result
+    rescue PG::ConnectionBad, PG::UnableToSend => ex
+      @connection_failed = true
+      raise ConnectionError.wrap(ex)
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
     end
@@ -56,6 +97,9 @@ module Bricolage
       result = yield rs
       rs.clear
       result
+    rescue PG::ConnectionBad, PG::UnableToSend => ex
+      @connection_failed = true
+      raise ConnectionError.wrap(ex)
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
     end
@@ -82,6 +126,9 @@ module Bricolage
           rs.clear
         end
       end
+    rescue PG::ConnectionBad, PG::UnableToSend => ex
+      @connection_failed = true
+      raise ConnectionError.wrap(ex)
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
     end
@@ -97,7 +144,9 @@ module Bricolage
         yield txn
       rescue
         begin
-          txn.abort unless txn.committed?
+          if not txn.committed? and not @connection_failed
+            txn.abort
+          end
         rescue => ex
           @logger.error "SQL error on transaction abort: #{ex.message} (ignored)"
         end
