@@ -1,5 +1,12 @@
 # Bricolage Release Note
 
+## version 5.18.1
+
+- new class SNSDataSource.
+- new class NullLogger.
+- new exception S3Exception.
+- new exception SNSException.
+
 ## version 5.18.0
 
 - [new] New parameter "no-backup" for my-import and my-migrate job classes.

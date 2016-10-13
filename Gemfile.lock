@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    bricolage (5.18.0)
+    bricolage (5.18.1)
       aws-sdk (~> 2)
       mysql2
       pg (~> 0.18.0)
@@ -11,12 +11,12 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    aws-sdk (2.6.4)
-      aws-sdk-resources (= 2.6.4)
-    aws-sdk-core (2.6.4)
+    aws-sdk (2.6.7)
+      aws-sdk-resources (= 2.6.7)
+    aws-sdk-core (2.6.7)
       jmespath (~> 1.0)
-    aws-sdk-resources (2.6.4)
-      aws-sdk-core (= 2.6.4)
+    aws-sdk-resources (2.6.7)
+      aws-sdk-core (= 2.6.7)
     coderay (1.1.0)
     fluent-logger (0.5.1)
       msgpack (>= 0.4.4, < 0.6.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
