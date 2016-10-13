@@ -2,7 +2,9 @@ require 'stringio'
 require 'logger'
 
 module Bricolage
+
   class Logger < ::Logger
+
     def Logger.intern_severity(sev)
       if sev.kind_of?(Integer)
         sev
@@ -63,5 +65,24 @@ module Bricolage
         "%.2f secs" % seconds
       end
     end
+
   end
-end
+
+
+  class NullLogger
+    def debug(*args) end
+    def debug?() false end
+    def info(*args) end
+    def info?() false end
+    def warn(*args) end
+    def warn?() false end
+    def error(*args) end
+    def error?() false end
+    def exception(*args) end
+    def with_elapsed_time(*args) yield end
+    def elapsed_time(*args) yield end
+    def level() Logger::ERROR end
+    def level=(l) l end
+  end
+
+end   # module Bricolage
