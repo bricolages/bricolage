@@ -5,6 +5,7 @@ require 'bricolage/commandutils'
 require 'bricolage/postgresconnection'
 require 'bricolage/vacuumlock'
 require 'bricolage/exception'
+require 'bricolage/logger'
 require 'pathname'
 
 module Bricolage
@@ -23,6 +24,7 @@ module Bricolage
         pgpass: nil,
         encoding: nil,
         psql: 'psql',
+        sql_log_level: Logger::INFO,
         tmpdir: Dir.tmpdir)
       @host = host
       @port = port
@@ -32,6 +34,7 @@ module Bricolage
       @pgpass = pgpass
       @encoding = encoding
       @psql = psql
+      @sql_log_level = Logger.intern_severity(sql_log_level)
       @tmpdir = tmpdir
       raise ParameterError, "missing psql host" unless @host
       raise ParameterError, "missing psql port" unless @port
@@ -46,6 +49,8 @@ module Bricolage
     attr_reader :port
     attr_reader :database
     attr_reader :user
+
+    attr_reader :sql_log_level
 
     def new_task
       PSQLTask.new(self)

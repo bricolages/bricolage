@@ -244,7 +244,7 @@ module Bricolage
     end
 
     def log_query(query)
-      @logger.info "[#{@ds.name}] #{mask_secrets query}"
+      @logger.log(@ds.sql_log_level) { "[#{@ds.name}] #{mask_secrets query}" }
     end
 
     def mask_secrets(msg)
@@ -258,7 +258,7 @@ module Bricolage
     ensure
       e = Time.now
       t = e - b
-      @logger.info "#{'%.1f' % t} secs"
+      @logger.log(@ds.sql_log_level) { "#{'%.1f' % t} secs" }
     end
 
   end

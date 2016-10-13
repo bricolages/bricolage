@@ -3,6 +3,15 @@ require 'logger'
 
 module Bricolage
   class Logger < ::Logger
+    def Logger.intern_severity(sev)
+      if sev.kind_of?(Integer)
+        sev
+      else
+        SEV_LABEL.index(sev.to_s.upcase) or
+            raise ParameterError, "no such log level: #{sev}"
+      end
+    end
+
     def Logger.default
       @default ||= new
     end
