@@ -152,34 +152,6 @@ module Bricolage
       }
     end
 
-    def streaming_execute_query(query, &block)
-      in_exec = false
-      log_query query
-      log_elapsed_time {
-        in_exec = true
-        @connection.send_query(query)
-      }
-      @connection.set_single_row_mode
-      while rs = @connection.get_result
-        # NOTE: query processing is in progress until the first result set is returned.
-        in_exec = false
-        begin
-          rs.check
-          yield rs
-        ensure
-          rs.clear
-        end
-      end
-    rescue Interrupt
-      cancel_force if in_exec
-      raise
-    rescue PG::ConnectionBad, PG::UnableToSend => ex
-      @connection_failed = true
-      raise ConnectionError.wrap(ex)
-    rescue PG::Error => ex
-      raise PostgreSQLException.wrap(ex)
-    end
-
     def in_transaction?
       @connection.transaction_status == PG::Constants::PQTRANS_INTRANS
     end
