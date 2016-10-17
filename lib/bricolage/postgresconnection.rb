@@ -123,6 +123,10 @@ module Bricolage
       execute_query(query) {|rs| rs.to_a.first }
     end
 
+    def query_rows(query)
+      execute_query(query) {|rs| rs.to_a }
+    end
+
     def execute_query(query, &block)
       log_query query
       rs = log_elapsed_time {
