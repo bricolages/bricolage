@@ -5,6 +5,7 @@ require 'bricolage/jobresult'
 require 'bricolage/variables'
 require 'bricolage/datasource'
 require 'bricolage/eventhandlers'
+require 'bricolage/postgresconnection'
 require 'bricolage/logger'
 require 'bricolage/exception'
 require 'bricolage/version'
@@ -14,12 +15,17 @@ require 'optparse'
 module Bricolage
 
   class Application
+    def Application.install_signal_handlers
+      Signal.trap('PIPE', 'IGNORE')
+      PostgresConnection.install_signal_handlers
+    end
+
     def Application.main
+      install_signal_handlers
       new.main
     end
 
     def initialize
-      Signal.trap('PIPE', 'IGNORE')
       @hooks = Bricolage
     end
 

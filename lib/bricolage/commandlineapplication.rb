@@ -1,9 +1,11 @@
+require 'bricolage/application'
 require 'bricolage/context'
 require 'forwardable'
 
 module Bricolage
   class CommandLineApplication
     def CommandLineApplication.define
+      Application.install_signal_handlers
       opts = new
       yield opts
       opts.parse!
