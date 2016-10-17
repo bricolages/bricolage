@@ -17,11 +17,11 @@ module Bricolage
 
   class JobNetRunner
     def JobNetRunner.main
+      Application.install_signal_handlers
       new.main
     end
 
     def initialize
-      Signal.trap('PIPE', 'IGNORE')
       @hooks = ::Bricolage
       @jobnet_id = nil
       @jobnet_start_time = Time.now

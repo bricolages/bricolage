@@ -7,6 +7,13 @@ module Bricolage
 
   class PostgresConnection
 
+    def PostgresConnection.install_signal_handlers
+      Signal.trap(:TERM) {
+        $stderr.puts 'receive SIGTERM'
+        raise Interrupt, 'SIGTERM'
+      }
+    end
+
     def PostgresConnection.open_data_source(ds)
       conn = _open_ds(ds)
       if block_given?
@@ -54,19 +61,46 @@ module Bricolage
       @closed
     end
 
+    def cancel_force
+      cancel
+    rescue PostgreSQLException
+    end
+
+    def cancel
+      @logger.info "cancelling PostgreSQL query..."
+      err = @connection.cancel
+      if err
+        @logger.error "could not cancel query: #{err}"
+        raise PostgreSQLException, "could not cancel query: #{err}"
+      else
+        @logger.info "successfully cancelled"
+      end
+    end
+
+    def querying
+      return yield
+    rescue Interrupt
+      @logger.info "query interrupted"
+      cancel_force
+      raise
+    end
+    private :querying
+
     def execute_update(query)
       log_query query
       rs = log_elapsed_time {
-        @connection.exec(query)
+        querying {
+          @connection.async_exec(query)
+        }
       }
-      result = rs.to_a
-      rs.clear
-      result
+      return rs.to_a
     rescue PG::ConnectionBad, PG::UnableToSend => ex
       @connection_failed = true
       raise ConnectionError.wrap(ex)
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
+    ensure
+      rs.clear if rs
     end
 
     alias execute execute_update
@@ -92,16 +126,18 @@ module Bricolage
     def execute_query(query, &block)
       log_query query
       rs = log_elapsed_time {
-        @connection.exec(query)
+        querying {
+          @connection.async_exec(query)
+        }
       }
-      result = yield rs
-      rs.clear
-      result
+      return (yield rs)
     rescue PG::ConnectionBad, PG::UnableToSend => ex
       @connection_failed = true
       raise ConnectionError.wrap(ex)
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
+    ensure
+      rs.clear if rs
     end
 
     alias query execute_query
@@ -113,12 +149,16 @@ module Bricolage
     end
 
     def streaming_execute_query(query, &block)
+      in_exec = false
       log_query query
       log_elapsed_time {
+        in_exec = true
         @connection.send_query(query)
       }
       @connection.set_single_row_mode
       while rs = @connection.get_result
+        # NOTE: query processing is in progress until the first result set is returned.
+        in_exec = false
         begin
           rs.check
           yield rs
@@ -126,6 +166,9 @@ module Bricolage
           rs.clear
         end
       end
+    rescue Interrupt
+      cancel_force if in_exec
+      raise
     rescue PG::ConnectionBad, PG::UnableToSend => ex
       @connection_failed = true
       raise ConnectionError.wrap(ex)
