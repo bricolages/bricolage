@@ -6,10 +6,8 @@ s3-ds: s3
 s3-prefix: shimpeko/test-abc-
 gzip: true
 dump-options:
-    partition_column: id
-    partition_number: 8
-    write_concurrency: 16
-    rotation_size: 16000000
+    src_zone_offset: "+00:00"
+    dst_zone_offset: "+09:00"
     delete_objects: true
 dest-ds: sql
 dest-table: $test_schema.users

@@ -183,7 +183,9 @@ module Bricolage
         write_concurrency: options['write_concurrency'],
         rotation_size: options['rotation_size'],
         delete_objects: options['delete_objects'],
-        object_key_delimiter: options['object_key_delimiter'])
+        object_key_delimiter: options['object_key_delimiter'],
+        src_zone_offset: options['src_zone_offset'],
+        dst_zone_offset: options['dst_zone_offset'])
     end
 
     class S3Export < Action
@@ -195,7 +197,9 @@ module Bricolage
          write_concurrency: 4,
          rotation_size: nil,
          delete_objects: false,
-         object_key_delimiter: nil)
+         object_key_delimiter: nil,
+         src_zone_offset: nil,
+         dst_zone_offset: nil)
         @table = table
         @statement = stmt
         @s3ds = s3ds
@@ -208,6 +212,8 @@ module Bricolage
         @rotation_size = rotation_size
         @delete_objects = delete_objects
         @object_key_delimiter = object_key_delimiter
+        @src_zone_offset = src_zone_offset
+        @dst_zone_offset = dst_zone_offset
       end
 
       def run
@@ -250,6 +256,12 @@ module Bricolage
         params[:r] = @rotation_size if @rotation_size
         params[:d] = nil if @delete_objects
         params[:k] = @object_key_delimiter if @object_key_delimiter
+        if src_zone_offset = @src_zone_offset || ds.mysql_options[:src_zone_offset]
+          params[:S] = src_zone_offset
+        end
+        if dst_zone_offset = @dst_zone_offset || ds.mysql_options[:dst_zone_offset]
+          params[:T] = dst_zone_offset
+        end
         params
       end
 
