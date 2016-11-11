@@ -139,19 +139,19 @@ class StreamingLoadJobClass < RubyJobClass
       end
       create_load_log_file(objects) {|log_url|
         @ds.open {|conn|
-          create_tmp_log_table(conn, log_url) {|tmp_log_table|
-            loaded, not_loaded = partition_loaded_objects(conn, objects, tmp_log_table)
-            loaded.each do |obj|
-              obj.dequeue(force: true, noop: @noop)
-            end
-          }
+          execute_update conn, "delete #{log_table_wk};"
+          execute_update conn, load_log_copy_stmt(log_table_wk, log_url, @src.credential_string)
+          loaded, not_loaded = partition_loaded_objects(conn, objects, log_table_wk)
+          loaded.each do |obj|
+            obj.dequeue(force: true, noop: @noop)
+          end
         }
       }
     end
 
     def load
       log_basic_info
-      @logger.info 'load with manifest'
+      @logger.info 'streaming load start'
       objects = @src.queued_objects
       if objects.empty?
         @logger.info 'no target data files; exit'
@@ -159,19 +159,28 @@ class StreamingLoadJobClass < RubyJobClass
       end
       create_load_log_file(objects) {|log_url|
         @ds.open {|conn|
-          create_tmp_log_table(conn, log_url) {|tmp_log_table|
-            loaded, not_loaded = partition_loaded_objects(conn, objects, tmp_log_table)
+          execute_update conn, "truncate #{work_table}"
+          conn.transaction {|txn|
+            execute_update conn, "delete #{log_table_wk}"
+            execute_update conn, load_log_copy_stmt(log_table_wk, log_url, @src.credential_string)
+            loaded, not_loaded = partition_loaded_objects(conn, objects, log_table_wk)
             unless @load_only
               loaded.each do |obj|
                 obj.dequeue(force: true, noop: @noop)
               end
             end
-            unless not_loaded.empty?
+            if not_loaded.empty?
+              @logger.info "no data files to load" unless @noop
+              txn.truncate_and_commit log_table_wk
+            else
               create_manifest_file(not_loaded) {|manifest_url|
-                init_work_table conn
                 execute_update conn, manifest_copy_stmt(work_table, manifest_url)
                 @logger.info "load succeeded: #{manifest_url}" unless @noop
-                commit conn, work_table, tmp_log_table unless @load_only
+                unless @load_only
+                  commit_work_table conn, work_table
+                  commit_load_log conn, log_table_wk
+                end
+                txn.truncate_and_commit log_table_wk
               }
               unless @load_only
                 not_loaded.each do |obj|
@@ -184,24 +193,11 @@ class StreamingLoadJobClass < RubyJobClass
       }
     end
 
-    def commit(conn, work_table, tmp_log_table)
-      @end_time = Time.now   # commit_load_log writes this, generate before that
-      transaction(conn) {
-        commit_work_table conn, work_table
-        commit_load_log conn, tmp_log_table
-      }
-    end
-
     private
-
-    def init_work_table(conn)
-      execute_update conn, "truncate #{work_table};"
-    end
 
     def commit_work_table(conn, work_table)
       insert_stmt = @sql ? @sql.source : "insert into #{@table} select * from #{work_table};"
       execute_update conn, insert_stmt
-      # keep work table records for tracing
     end
 
     def create_manifest_file(objects)
@@ -243,8 +239,11 @@ class StreamingLoadJobClass < RubyJobClass
       csv = make_load_log_csv(objects)
       @logger.info "load_log:\n" + csv
       url = @src.put_control_file(log_name, csv, noop: @noop)
-      yield url
-      @src.remove_control_file(File.basename(url), noop: @noop)
+      begin
+        yield url
+      ensure
+        @src.remove_control_file(File.basename(url), noop: @noop)
+      end
     end
 
     def make_load_log_csv(objects)
@@ -270,10 +269,6 @@ class StreamingLoadJobClass < RubyJobClass
     LoadLogRecord = Struct.new(:job_process_id, :start_time, :end_time, :target_table, :data_file)
 
     def create_tmp_log_table(conn, log_url)
-      target_table = log_table_wk
-      execute_update conn, "truncate #{target_table};"
-      execute_update conn, load_log_copy_stmt(target_table, log_url, @src.credential_string)
-      yield target_table
     end
 
     def log_table_wk
@@ -313,6 +308,7 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def commit_load_log(conn, tmp_table_name)
+      @end_time = Time.now
       conn.execute(<<-EndSQL)
         insert into #{@log_table}
         select
@@ -340,12 +336,6 @@ class StreamingLoadJobClass < RubyJobClass
     def sql_string(str)
       escaped = str.gsub("'", "''")
       %Q('#{escaped}')
-    end
-
-    def transaction(conn)
-      execute_update conn, 'begin transaction'
-      yield
-      execute_update conn, 'commit'
     end
 
     def execute_update(conn, sql)
