@@ -2,6 +2,10 @@
 
 ## version 5.19.0
 
+- [new] streaming_load: new option --ctl-prefix and --keep-ctl (both is optional).
+
+## version 5.19.0
+
 - [new] bricolage, bricolage-jobnet, Bricolage::CommandLineApplication now do not block on executing queries in PostgreSQL-like DBs (including Redshift).
 - [CHANGE] Removes (maybe) unused method PostgresConnection#streaming_execute_query.  Use #query_batch instead.
 
