@@ -1,6 +1,10 @@
 # Bricolage Release Note
 
-## version 5.19.0
+## version 5.20.0
+
+- [new] streaming_load: Reduces the number of transaction.
+
+## version 5.19.1
 
 - [new] streaming_load: new option --ctl-prefix and --keep-ctl (both is optional).
 
