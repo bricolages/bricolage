@@ -1,12 +1,14 @@
 class: streaming_load
 
 s3-ds: s3
+ctl-prefix: ctl
+keep-ctl: true
 queue-path: queue
-persistent-path: save/year=%Y/month=%m/day=%d/hour=%H
+persistent-path: save/%Y/%m/%d
 file-name: "%Y%m%d-%H%M_%Q.txt"
 
 redshift-ds: sql
-dest-table: load_test
-work-table: load_test_wk
-log-table: load_test_l
+dest-table: $test_schema.load_test
+work-table: $test_schema.load_test_wk
+log-table: $test_schema.load_test_l
 load-options: "delimiter '\\t'"

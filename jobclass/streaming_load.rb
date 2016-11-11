@@ -18,6 +18,8 @@ class StreamingLoadJobClass < RubyJobClass
         optional: true, default: Bricolage::PSQLLoadOptions.new,
         value_handler: lambda {|value, ctx, vars| Bricolage::PSQLLoadOptions.parse(value) })
     params.add Bricolage::DataSourceParam.new('s3', 's3-ds', 'S3 data source.')
+    params.add Bricolage::StringParam.new('ctl-prefix', 'S3_PREFIX', 'S3 object key prefix for control files. (default: ${queue-path}/ctl)', optional: true)
+    params.add Bricolage::OptionalBoolParam.new('keep-ctl', 'Does not delete control files if true.')
     params.add Bricolage::StringParam.new('queue-path', 'S3_PATH', 'S3 path for data file queue.')
     params.add Bricolage::StringParam.new('persistent-path', 'S3_PATH', 'S3 path for persistent data file store.')
     params.add Bricolage::StringParam.new('file-name', 'PATTERN', 'name pattern of target data file.')
@@ -61,6 +63,7 @@ class StreamingLoadJobClass < RubyJobClass
     RedshiftStreamingLoader.new(
       data_source: ds,
       queue: make_s3_queue(params),
+      keep_ctl: params['keep-ctl'],
       table: string(params['dest-table']),
       work_table: string(params['work-table']),
       log_table: string(params['log-table']),
@@ -76,6 +79,7 @@ class StreamingLoadJobClass < RubyJobClass
     ds = params['s3-ds']
     S3Queue.new(
       data_source: ds,
+      ctl_prefix: (params['ctl-prefix'] || "#{params['queue-path']}/ctl"),
       queue_path: params['queue-path'],
       persistent_path: params['persistent-path'],
       file_name: params['file-name'],
@@ -88,12 +92,13 @@ class StreamingLoadJobClass < RubyJobClass
   end
 
   class RedshiftStreamingLoader
-    def initialize(data_source:, queue:,
+    def initialize(data_source:, queue:, keep_ctl:,
         table:, work_table: nil, log_table: nil, load_options: nil,
         sql: nil,
         logger:, noop: false, load_only: false)
       @ds = data_source
       @src = queue
+      @keep_ctl = keep_ctl
       @table = table
       @work_table = work_table
       @log_table = log_table
@@ -200,13 +205,17 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def create_manifest_file(objects)
-      manifest_name = "manifest-#{@job_process_id}.json"
+      manifest_name = if @keep_ctl
+          "#{Time.now.strftime('%Y/%m/%d')}/#{@job_process_id}-#{@table}.json"
+        else
+          "manifest-#{@job_process_id}.json"
+        end
       @logger.info "creating manifest: #{manifest_name}"
       json = make_manifest_json(objects)
       @logger.info "manifest:\n" + json
       url = @src.put_control_file(manifest_name, json, noop: @noop)
       yield url
-      @src.remove_control_file(File.basename(url), noop: @noop)
+      @src.remove_control_file(File.basename(url), noop: @noop) unless @keep_ctl
     end
 
     def make_manifest_json(objects)
@@ -359,8 +368,9 @@ class StreamingLoadJobClass < RubyJobClass
   class S3Queue
     extend Forwardable
 
-    def initialize(data_source:, queue_path:, persistent_path:, file_name:, logger:)
+    def initialize(data_source:, ctl_prefix:, queue_path:, persistent_path:, file_name:, logger:)
       @ds = data_source
+      @ctl_prefix = ctl_prefix
       @queue_path = queue_path
       @persistent_path = persistent_path
       @file_name = file_name
@@ -399,7 +409,8 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def control_file_path(name)
-      "#{queue_path}/ctl/#{name}"
+      prefix = @ctl_prefix || "#{queue_path}/ctl"
+      "#{prefix}/#{name}"
     end
 
     def each(&block)
