@@ -132,6 +132,7 @@ module Bricolage
         retries -= 1
         if retries >= 0
           logger.warn "Retry Bucket#objects() for XML parsing error: #{e.message}"
+          sleep 1
           retry
         end
         raise
