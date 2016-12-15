@@ -1,3 +1,4 @@
+data_date: "<%= (Date.today - 1).strftime('%Y-%m-%d') %>"
 defaults:
     analyze: true
     grant:
