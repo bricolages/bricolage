@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.20.1
+
+- [new] new job class my-import-delta.
+
 ## version 5.20.0
 
 - [new] streaming_load: Reduces the number of transaction.
