@@ -125,7 +125,15 @@ module Bricolage
     end
 
     def traverse(rel, no_prefix: false)
+      retries ||= client.config.retry_limit
       bucket.objects(prefix: path(rel, no_prefix: no_prefix))
+    rescue Aws::Xml::Parser::ParsingError => e
+      if (retries -= 1) >= 0
+        retry
+        logger.warn "Retry Bucket#objects() for XML parsing error: #{e.message}"
+      else
+        throw
+      end
     end
   end
 
