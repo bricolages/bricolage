@@ -1,9 +1,12 @@
 # Bricolage Release Note
 
+## version 5.20.2
+
+- [fix] AWS S3 API ListObjectsV2 may return corrupted XML, retry it
+
 ## version 5.20.1
 
 - [new] new job class my-import-delta.
-- [fix] AWS S3 API ListObjectsV2 may return corrupted XML, retry it
 
 ## version 5.20.0
 
