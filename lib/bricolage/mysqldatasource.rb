@@ -269,7 +269,8 @@ module Bricolage
         encoding: 'useUnicode=true&characterEncoding',
         read_timeout: 'netTimeoutForStreamingResults',
         connect_timeout: 'connectTimeout',
-        reconnect: 'autoReconnect'
+        reconnect: 'autoReconnect',
+        collation: 'connectionCollation'
       }
 
       def connection_property
