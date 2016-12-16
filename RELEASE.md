@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.20.3
+
+- [fix] mysql data source: new option "collation".
+
 ## version 5.20.2
 
 - [fix] AWS S3 API ListObjectsV2 may return corrupted XML, retry it
