@@ -3,7 +3,7 @@ src-ds: mysql
 src-tables:
     users: main.users
 s3-ds: s3
-s3-prefix: shimpeko/test-abc-
+s3-prefix: $test_schema/test-abc-
 gzip: true
 dump-options:
     src_zone_offset: "+00:00"
@@ -24,7 +24,7 @@ options:
     #acceptanydate: true
     #dateformat: "auto"
     #timeformat: "auto"
-vacuum-sort: true
+#vacuum-sort: true
 analyze: true
 grant:
     privilege: select
