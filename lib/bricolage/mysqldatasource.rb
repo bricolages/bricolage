@@ -230,22 +230,44 @@ module Bricolage
       end
 
       def s3export
-        cmd = build_cmd(command_parameters)
-        ds.logger.info '[CMD] ' + cmd.join(' ')
+        cmd = build_cmd(environment_variables, command_parameters)
+        ds.logger.info "[CMD] #{format_cmd(cmd)}"
         Open3.popen2e(*cmd) do |input, output, thread|
           input.close
           output.each do |line|
             puts line
           end
           unless thread.value.success?
-            raise JobFailure, "#{cmd.join(' ')} failed (status #{thread.value.to_i})"
+            raise JobFailure, "mys3dump failed (status #{thread.value.to_i})"
           end
         end
       end
 
+      def format_cmd(cmd)
+        cmd[1..-1].join(' ')   # do not show env
+      end
+
+      def environment_variables
+        {
+          'AWS_ACCESS_KEY_ID' => @s3ds.access_key,
+          'AWS_SECRET_ACCESS_KEY' => @s3ds.secret_key,
+          'MYS3DUMP_PASSWORD' => ds.password
+        }
+      end
+
       def command_parameters
-        params = {jar: mys3dump_path.to_s, h: ds.host, P: ds.port.to_s, D: ds.database, u: ds.username, p: ds.password, o: connection_property, t: @table,
-                   'Daws.accessKeyId' => @s3ds.access_key, 'Daws.secretKey' => @s3ds.secret_key, b: @s3ds.bucket.name, x: @prefix}
+        params = {
+          jar: mys3dump_path.to_s,
+          h: ds.host,
+          P: ds.port.to_s,
+          D: ds.database,
+          u: ds.username,
+          #p: ds.password,
+          o: connection_property,
+          t: @table,
+          b: @s3ds.bucket.name,
+          x: @prefix
+        }
         params[:q] = @statement.stripped_source.chomp(';') if @statement
         params[:f] = @format if @format
         params[:C] = nil if @gzip
@@ -284,8 +306,8 @@ module Bricolage
         Pathname(__dir__).parent.parent + "libexec/mys3dump.jar"
       end
 
-      def build_cmd(options)
-        ['java'] + options.flat_map {|k, v| v ? ["-#{k}", v.to_s] : ["-#{k}"] }
+      def build_cmd(environ, options)
+        [environ, 'java'] + options.flat_map {|k, v| v ? ["-#{k}", v.to_s] : ["-#{k}"] }
       end
     end
 
