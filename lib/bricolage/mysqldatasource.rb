@@ -100,7 +100,7 @@ module Bricolage
       end
 
       def export_by_sqldump
-        cmds = [[sqldump_path.to_s, "--#{@format}", ds.host, ds.port.to_s, ds.username, ds.password, ds.database, @statement.stripped_source]]
+        cmds = [[{"SQLDUMP_PASSWORD" => ds.password}, sqldump_path.to_s, "--#{@format}", ds.host, ds.port.to_s, ds.username, ds.database, @statement.stripped_source]]
         cmds.push [GZIP_COMMAND] if @gzip
         cmds.last.push({out: @path.to_s})
         ds.logger.info '[CMD] ' + format_pipeline(cmds)
@@ -108,14 +108,13 @@ module Bricolage
         statuses.each_with_index do |st, idx|
           unless st.success?
             cmd = cmds[idx].first
-            raise JobFailure, "#{cmd} failed (status #{st.to_i})"
+            raise JobFailure, "sqldump failed (status #{st.to_i})"
           end
         end
       end
 
       def format_pipeline(cmds)
-        cmds = cmds.map {|args| args.dup }
-        cmds.first[5] = '****'
+        cmds = cmds.map {|args| args[0].kind_of?(Hash) ? args[1..-1] : args.dup }   # do not show env
         cmds.map {|args| %Q("#{args.join('" "')}") }.join(' | ')
       end
 
