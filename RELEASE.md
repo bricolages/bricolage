@@ -1,8 +1,12 @@
 # Bricolage Release Note
 
+## version 5.20.4
+
+- [fix] my-migrate, my-import: should not drop old tables in the RENAME transaction, to avoid "table dropped by concurrent transaction" error.
+
 ## version 5.20.3
 
-- [fix] mysql data source: new option "collation".
+- [new] mysql data source: new option "collation".
 
 ## version 5.20.2
 
