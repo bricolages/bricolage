@@ -86,24 +86,20 @@ JobClass.define('my-migrate') {
           task.load params['s3-ds'], params['s3-file'], work_table,
               'json', nil, params['options'].merge('gzip' => params['gzip'])
 
-          # GRANT
+          # GRANT, ANALYZE
           task.grant_if params['grant'], work_table
-        }
+          task.analyze_if params['analyze'], work_table
 
-        # VACUUM, ANALYZE
-        task.vacuum_if params['vacuum'], params['vacuum-sort'], work_table
-        task.analyze_if params['analyze'], work_table
-
-        # RENAME
-        task.transaction {
-          if params['no-backup']
-            task.drop_force params['dest-table'].to_s
-          else
-            task.create_dummy_table '${dest_table}'
-            task.rename_table params['dest-table'].to_s, "#{params['dest-table'].name}_old"
-          end
+          # RENAME
+          task.create_dummy_table '${dest_table}'
+          task.rename_table params['dest-table'].to_s, "#{params['dest-table'].name}_old"
           task.rename_table work_table, params['dest-table'].name
         }
+
+        task.drop_force prev_table if params['no-backup']
+
+        # VACUUM: vacuum is needless for newly created table, applying vacuum after exposure is not a problem.
+        task.vacuum_if params['vacuum'], params['vacuum-sort'], params['dest-table'].to_s
       }
     end
   }
