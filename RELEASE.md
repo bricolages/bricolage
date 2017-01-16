@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.20.5
+
+- [fix] my-migrate, my-import: Do not exposure passwords in command line arguments or log files.
+
 ## version 5.20.4
 
 - [fix] my-migrate, my-import: should not drop old tables in the RENAME transaction, to avoid "table dropped by concurrent transaction" error.
