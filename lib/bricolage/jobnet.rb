@@ -357,7 +357,12 @@ module Bricolage
       end
 
       def JobNetRef.for_job_path(path)
-        new(path.parent.basename, path.basename('.job'), Location.dummy)
+        basename = path
+        # remove all extnames
+        until (ext = basename.extname).empty?
+          basename = basename.basename(ext)
+        end
+        new(path.parent.basename, basename, Location.dummy)
       end
 
       def initialize(subsys, name, location)
