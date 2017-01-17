@@ -248,7 +248,7 @@ Options:
         parser.on('-e', '--environment=NAME', "Sets execution environment. [default: #{Context::DEFAULT_ENV}]") {|env|
           @environment = env
         }
-        parser.on('--log-dir=PATH', 'Log file prefix.') {|path|
+        parser.on('-L', '--log-dir=PATH', 'Log file prefix.') {|path|
           @log_path = LogFilePath.new("#{path}/%{std}.log")
         }
         parser.on('--log-path=PATH', 'Log file path template.') {|path|
@@ -257,7 +257,7 @@ Options:
         parser.on('--local-state-dir=PATH', 'Stores local state in this path.') {|path|
           @local_state_dir = Pathname(path)
         }
-        parser.on('--enable-queue', 'Enables job queue.') {
+        parser.on('-Q', '--enable-queue', 'Enables job queue.') {
           @enable_queue = true
         }
         parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|

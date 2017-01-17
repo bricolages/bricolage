@@ -220,7 +220,7 @@ Global Options:
       parser.on('-E', '--explain', 'Applies EXPLAIN to the SQL.') {
         @explain = true
       }
-      parser.on('--log-dir=PATH', 'Log file prefix.') {|path|
+      parser.on('-L', '--log-dir=PATH', 'Log file prefix.') {|path|
         @log_path = LogFilePath.new("#{path}/%{std}.log")
       }
       parser.on('--log-path=PATH', 'Log file path template.') {|path|
