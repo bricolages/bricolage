@@ -68,6 +68,10 @@ module Bricolage
         logger: @logger)
     end
 
+    def subsystem_name
+      @filesystem.scope
+    end
+
     extend Forwardable
     def_delegators '@filesystem',
       :scoped?,

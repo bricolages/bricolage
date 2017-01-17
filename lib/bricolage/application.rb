@@ -2,13 +2,16 @@ require 'bricolage/context'
 require 'bricolage/job'
 require 'bricolage/jobclass'
 require 'bricolage/jobresult'
+require 'bricolage/jobnet'
 require 'bricolage/variables'
 require 'bricolage/datasource'
 require 'bricolage/eventhandlers'
 require 'bricolage/postgresconnection'
+require 'bricolage/logfilepath'
 require 'bricolage/logger'
 require 'bricolage/exception'
 require 'bricolage/version'
+require 'fileutils'
 require 'pathname'
 require 'optparse'
 
@@ -27,6 +30,7 @@ module Bricolage
 
     def initialize
       @hooks = Bricolage
+      @start_time = Time.now
     end
 
     def main
@@ -60,7 +64,9 @@ module Bricolage
 
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(job.id, [job]))
       @hooks.run_before_job_hooks(BeforeJobEvent.new(job))
-      result = job.execute
+      result = redirect_log_to_file(opts.log_path, job) {
+        job.execute
+      }
       @hooks.run_after_job_hooks(AfterJobEvent.new(result))
       @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(result.success?, [job]))
       exit result.status
@@ -70,6 +76,30 @@ module Bricolage
     rescue ApplicationError => ex
       raise if $DEBUG
       error_exit ex.message
+    end
+
+    def redirect_log_to_file(log_path, job)
+      return yield unless log_path
+
+      path = log_path.format(
+        job_ref: JobNet::JobRef.new(job.subsystem, job.id, '-'),
+        jobnet_id: "#{job.subsystem}/#{job.id}",
+        job_start_time: @start_time,
+        jobnet_start_time: @start_time
+      )
+      FileUtils.mkdir_p File.dirname(path)
+      stdout_save = $stdout.dup
+      stderr_save = $stderr.dup
+      begin
+        File.open(path, 'w+') {|f|
+          $stdout.reopen f
+          $stderr.reopen f
+        }
+        return yield
+      ensure
+        $stdout.reopen stdout_save; stdout_save.close
+        $stderr.reopen stderr_save; stderr_save.close
+      end
     end
 
     def load_job(ctx, opts)
@@ -154,6 +184,7 @@ module Bricolage
       @global_variables = Variables.new
       @dry_run = false
       @explain = false
+      @log_path = LogFilePath.default
       @list_global_variables = false
       @list_variables = false
       @list_declarations = false
@@ -188,6 +219,12 @@ Global Options:
       }
       parser.on('-E', '--explain', 'Applies EXPLAIN to the SQL.') {
         @explain = true
+      }
+      parser.on('--log-dir=PATH', 'Log file prefix.') {|path|
+        @log_path = LogFilePath.new("#{path}/%{std}.log")
+      }
+      parser.on('--log-path=PATH', 'Log file path template.') {|path|
+        @log_path = LogFilePath.new(path)
       }
       parser.on('--list-job-class', 'Lists job class name and (internal) class path.') {
         JobClass.list.each do |name|
@@ -237,6 +274,7 @@ Global Options:
     attr_reader :global_variables
 
     attr_reader :job_file
+    attr_reader :log_path
 
     def file_mode?
       !!@job_file

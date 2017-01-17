@@ -50,6 +50,10 @@ module Bricolage
       @job_class.id
     end
 
+    def subsystem
+      @context.subsystem_name
+    end
+
     def init_global_variables
       # Context#global_variables loads file on each call, fix global variables here.
       @global_variables = @context.global_variables

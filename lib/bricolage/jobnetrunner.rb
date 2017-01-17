@@ -7,6 +7,7 @@ require 'bricolage/jobresult'
 require 'bricolage/datasource'
 require 'bricolage/variables'
 require 'bricolage/eventhandlers'
+require 'bricolage/logfilepath'
 require 'bricolage/logger'
 require 'bricolage/exception'
 require 'bricolage/version'
@@ -25,6 +26,7 @@ module Bricolage
       @hooks = ::Bricolage
       @jobnet_id = nil
       @jobnet_start_time = Time.now
+      @job_start_time = nil
       @log_path = nil
     end
 
@@ -123,10 +125,11 @@ module Bricolage
 
     def execute_job(ref, queue)
       logger.debug "job #{ref}"
+      @job_start_time = Time.now
       job = Job.load_ref(ref, @ctx)
       job.compile
       @hooks.run_before_job_hooks(BeforeJobEvent.new(ref))
-      result = job.execute_in_process(make_log_path(ref))
+      result = job.execute_in_process(instanciate_log_path(ref))
       @hooks.run_after_job_hooks(AfterJobEvent.new(result))
       result
     rescue Exception => ex
@@ -135,22 +138,14 @@ module Bricolage
       JobResult.error(ex)
     end
 
-    def make_log_path(job_ref)
+    def instanciate_log_path(ref)
       return nil unless @log_path
-      start_time = Time.now
-      @log_path.gsub(/%\{\w+\}/) {|var|
-        case var
-        when '%{jobnet_start_date}' then @jobnet_start_time.strftime('%Y%m%d')
-        when '%{jobnet_start_time}' then @jobnet_start_time.strftime('%Y%m%d_%H%M%S%L')
-        when '%{job_start_date}' then start_time.strftime('%Y%m%d')
-        when '%{job_start_time}' then start_time.strftime('%Y%m%d_%H%M%S%L')
-        when '%{jobnet}', '%{net}', '%{jobnet_id}', '%{net_id}', '%{flow}', '%{flow_id}' then @jobnet_id.gsub('/', '::')
-        when '%{subsystem}' then job_ref.subsystem
-        when '%{job}', '%{job_id}' then job_ref.name
-        else
-          raise ParameterError, "bad log path variable: #{var}"
-        end
-      }
+      @log_path.format(
+        job_ref: ref,
+        jobnet_id: @jobnet_id,
+        job_start_time: @job_start_time,
+        jobnet_start_time: @jobnet_start_time
+      )
     end
 
     public :puts
@@ -180,7 +175,7 @@ module Bricolage
         @app = app
         @environment = nil
         @jobnet_files = nil
-        @log_path = nil
+        @log_path = LogFilePath.default
         @queue_path = nil
         @check_only = false
         @list_jobs = false
@@ -191,8 +186,8 @@ module Bricolage
 
       attr_reader :environment
       attr_reader :jobnet_file
-      attr_reader :log_path
       attr_reader :queue_path
+      attr_reader :log_path
 
       def queue_exist?
         !!@queue_path
@@ -221,8 +216,11 @@ Options:
         parser.on('-e', '--environment=NAME', "Sets execution environment. [default: #{Context::DEFAULT_ENV}]") {|env|
           @environment = env
         }
+        parser.on('--log-dir=PATH', 'Log file prefix.') {|path|
+          @log_path = LogFilePath.new("#{path}/%{std}.log")
+        }
         parser.on('--log-path=PATH', 'Log file path template.') {|path|
-          @log_path = path
+          @log_path = LogFilePath.new(path)
         }
         parser.on('--queue=PATH', 'Use job queue.') {|path|
           @queue_path = Pathname(path)
