@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.21.0
+
+- [new] bricolage-jobnet command accepts .job file as a single job jobnet.
+
 ## version 5.20.5
 
 - [fix] my-migrate, my-import: Do not exposure passwords in command line arguments or log files.
