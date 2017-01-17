@@ -1,5 +1,12 @@
 # Bricolage Release Note
 
+## version 5.22.0
+
+- [new] bricolage: new option --log-path.
+- [new] bricolage, bricolage-jobnet: new option --log-dir.
+- [new] bricolage, bricolage-jobnet: new env BRICOLAGE_LOG_PATH.
+- [new] bricolage, bricolage-jobnet: new env BRICOLAGE_LOG_DIR.
+
 ## version 5.21.0
 
 - [new] bricolage-jobnet command accepts .job file as a single job jobnet.
