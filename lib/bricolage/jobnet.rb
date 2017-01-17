@@ -12,6 +12,13 @@ module Bricolage
       root
     end
 
+    def RootJobNet.load_single_job(ctx, path)
+      root = new(JobNet::FileLoader.new(ctx), JobNet.load_single_job(path))
+      root.load_recursive
+      root.fix
+      root
+    end
+
     def initialize(jobnet_loader, start_jobnet)
       @jobnet_loader = jobnet_loader
       @start_jobnet = start_jobnet
@@ -140,6 +147,12 @@ module Bricolage
       raise ParameterError, "could not load jobnet: #{path} (#{err.message})"
     end
 
+    def JobNet.load_single_job(path, ref = JobNetRef.for_job_path(path))
+      jobnet_script = ref.name.to_s
+      script_io = StringIO.new(jobnet_script)
+      Parser.new(ref).parse_stream(script_io)
+    end
+
     def initialize(ref, location)
       @ref = ref
       @location = location
@@ -241,9 +254,9 @@ module Bricolage
         @jobnet_ref = jobnet_ref
       end
 
-      def parse_stream(f)
-        net = JobNet.new(@jobnet_ref, Location.for_file(f))
-        foreach_edge(f) do |src, dest|
+      def parse_stream(io)
+        net = JobNet.new(@jobnet_ref, Location.for_io(io))
+        foreach_edge(io) do |src, dest|
           net.add_edge src, dest
         end
         net
@@ -261,7 +274,7 @@ module Bricolage
         f.each do |line|
           text = line.sub(/\#.*/, '').strip
           next if text.empty?
-          loc = Location.for_file(f)
+          loc = Location.for_io(f)
 
           if m = DEPEND_PATTERN.match(text)
             src = (m[1] ? ref(m[1], loc) : default_src) or
@@ -343,6 +356,10 @@ module Bricolage
         new(path.parent.basename, path.basename('.jobnet'), Location.dummy)
       end
 
+      def JobNetRef.for_job_path(path)
+        new(path.parent.basename, path.basename('.job'), Location.dummy)
+      end
+
       def initialize(subsys, name, location)
         super
         @jobnet = nil
@@ -389,6 +406,18 @@ module Bricolage
 
       def Location.for_file(f)
         new(f.path, f.lineno)
+      end
+
+      def Location.for_non_file(io)
+        new(io.inspect, io.lineno)
+      end
+
+      def Location.for_io(io)
+        if io.respond_to?(:path)
+          for_file(io)
+        else
+          for_non_file(io)
+        end
       end
 
       def initialize(file, lineno)
