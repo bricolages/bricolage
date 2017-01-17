@@ -1,5 +1,6 @@
 require 'bricolage/jobnet'
 require 'bricolage/exception'
+require 'fileutils'
 require 'pathname'
 
 module Bricolage
@@ -92,6 +93,7 @@ module Bricolage
         @path.unlink if @path.exist?
         return
       end
+      FileUtils.mkdir_p @path.dirname
       tmpname = "#{@path}.tmp.#{Process.pid}"
       begin
         File.open(tmpname, 'w') {|f|

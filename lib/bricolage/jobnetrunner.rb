@@ -38,7 +38,7 @@ module Bricolage
       opts = Options.new(self)
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse ARGV
-      @ctx = Context.for_application(nil, opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
+      @ctx = Context.for_application(job_path: opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
       @jobnet_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
       @log_path = opts.log_path
       jobnet =
@@ -53,7 +53,7 @@ module Bricolage
       end
       unless queue.queued?
         enqueue_jobs jobnet, queue
-        logger.info "jobs are queued." if opts.queue_exist?
+        logger.info "jobs are queued."
       end
       if opts.list_jobs?
         list_jobs queue
@@ -79,11 +79,30 @@ module Bricolage
     end
 
     def get_queue(opts)
-      if opts.queue_path
-        FileTaskQueue.restore_if_exist(opts.queue_path)
+      if path = get_queue_file_path(opts)
+        logger.info "queue path: #{path}"
+        FileTaskQueue.restore_if_exist(path)
       else
         TaskQueue.new
       end
+    end
+
+    def get_queue_file_path(opts)
+      if opts.queue_path
+        opts.queue_path
+      elsif opts.enable_queue?
+        opts.local_state_dir + 'queue' + "#{app_name}.#{@jobnet_id.tr('/', '.')}"
+      else
+        nil
+      end
+    end
+
+    def app_name
+      path = @ctx.home_path.realpath
+      while /\A(?:\d+|current|releases)\z/ =~ path.basename.to_s   # is Capistrano dirs
+        path = path.dirname
+      end
+      path.basename.to_s
     end
 
     def enqueue_jobs(jobnet, queue)
@@ -176,7 +195,17 @@ module Bricolage
         @environment = nil
         @jobnet_files = nil
         @log_path = LogFilePath.default
-        @queue_path = nil
+        @local_state_dir = Pathname('/tmp/bricolage')
+        if path = ENV['BRICOLAGE_QUEUE_PATH']
+          @enable_queue = true
+          @queue_path = Pathname(path)
+        elsif ENV['BRICOLAGE_ENABLE_QUEUE']
+          @enable_queue = true
+          @queue_path = nil
+        else
+          @enable_queue = false
+          @queue_path = nil
+        end
         @check_only = false
         @list_jobs = false
         @global_variables = Variables.new
@@ -186,12 +215,15 @@ module Bricolage
 
       attr_reader :environment
       attr_reader :jobnet_file
-      attr_reader :queue_path
       attr_reader :log_path
 
-      def queue_exist?
-        !!@queue_path
+      attr_reader :local_state_dir
+
+      def enable_queue?
+        @enable_queue
       end
+
+      attr_reader :queue_path
 
       def check_only?
         @check_only
@@ -222,7 +254,13 @@ Options:
         parser.on('--log-path=PATH', 'Log file path template.') {|path|
           @log_path = LogFilePath.new(path)
         }
-        parser.on('--queue=PATH', 'Use job queue.') {|path|
+        parser.on('--local-state-dir=PATH', 'Stores local state in this path.') {|path|
+          @local_state_dir = Pathname(path)
+        }
+        parser.on('--enable-queue', 'Enables job queue.') {
+          @enable_queue = true
+        }
+        parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|
           @queue_path = Pathname(path)
         }
         parser.on('-c', '--check-only', 'Checks job parameters and quit without executing.') {
