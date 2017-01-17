@@ -36,6 +36,10 @@ module Bricolage
       false
     end
 
+    def scope
+      nil
+    end
+
     attr_reader :path
     attr_reader :environment
 
@@ -156,6 +160,10 @@ module Bricolage
 
     def scoped?
       true
+    end
+
+    def scope
+      @id
     end
 
     def root
