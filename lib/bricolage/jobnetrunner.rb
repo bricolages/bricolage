@@ -39,7 +39,12 @@ module Bricolage
       @ctx = Context.for_application(nil, opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
       @jobnet_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
       @log_path = opts.log_path
-      jobnet = RootJobNet.load(@ctx, opts.jobnet_file)
+      jobnet =
+        if opts.jobnet_file.extname == '.job'
+          RootJobNet.load_single_job(@ctx, opts.jobnet_file)
+        else
+          RootJobNet.load(@ctx, opts.jobnet_file)
+        end
       queue = get_queue(opts)
       if queue.locked?
         raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
