@@ -1,0 +1,40 @@
+/*
+class: my-import-delta
+src-ds: mysql_summary
+src-tables:
+    item_pv: item_pv
+s3-ds: s3
+s3-prefix: bricolage/my-import-delta/$data_date/data.
+gzip: true
+dump-options:
+    partition_column: id
+    delete_objects: true
+dest-ds: sql
+dest-table: $test_schema.item_pv_acc
+delete-cond: "data_date = '$data_date'"
+options:
+    statupdate: false
+    compupdate: false
+    maxerror: 0
+    #acceptinvchars: " "
+    #trimblanks: true
+    #truncatecolumns: true
+    ## datetime
+    #acceptanydate: true
+    #dateformat: "auto"
+    #timeformat: "auto"
+#vacuum-sort: true
+analyze: true
+*/
+
+select
+    data_date
+    , item_id
+    , pv
+    , uu
+from
+    $item_pv
+where
+    date = '$data_date'
+    and (@PARTITION_CONDITION@)
+;

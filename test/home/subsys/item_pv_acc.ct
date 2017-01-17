@@ -1,0 +1,8 @@
+create table item_pv_acc
+( data_date date encode lzo
+, item_id integer encode lzo
+, pv bigint encode lzo
+, uu bigint encode lzo
+)
+sortkey (data_date, item_id)
+;
