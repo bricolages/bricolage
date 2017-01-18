@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.22.2
+
+- [new] new option -Q, -L
+
 ## version 5.22.1
 
 - [new] bricolage-jobnet: new options --enable-queue and --local-state-dir, for auto-named job queue.
