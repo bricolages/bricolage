@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.22.3
+
+- [new] load, insert: Reduces the number of transactions.
+
 ## version 5.22.2
 
 - [new] new option -Q, -L
