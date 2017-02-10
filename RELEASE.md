@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.23.0
+
+- [CHANGE] Drops TD data source support from core.  Use separated bricolage-td gem.
+
 ## version 5.22.3
 
 - [new] load, insert: Reduces the number of transactions.
