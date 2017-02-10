@@ -23,11 +23,13 @@ JobClass.define('insert') {
   script {|params, script|
     script.task(params['data-source']) {|task|
       task.truncate_if params['truncate']
-      task.drop_force_if params['drop']
-      task.exec params['table-def'] if params['table-def']
-      task.exec params['sql-file']
+      task.transaction {
+        task.drop_force_if params['drop']
+        task.exec params['table-def'] if params['table-def']
+        task.exec params['sql-file']
+        task.analyze_if params['analyze']
+      }
       task.vacuum_if params['vacuum'], params['vacuum-sort']
-      task.analyze_if params['analyze']
     }
   }
 }
