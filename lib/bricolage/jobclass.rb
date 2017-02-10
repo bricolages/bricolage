@@ -17,13 +17,27 @@ module Bricolage
       CLASSES[id] = c
     end
 
-    srcdir = Pathname(__FILE__).realpath.parent.parent.parent.cleanpath
-    LOAD_PATH = [srcdir + 'jobclass']
+    LOAD_PATHES = []
+
+    def JobClass.add_load_path(path)
+      LOAD_PATHES.push path
+    end
+
+    def JobClass.primary_load_path
+      load_path_for_lib_file(__FILE__)
+    end
+
+    def JobClass.load_path_for_lib_file(path)
+      srcdir = Pathname(path).realpath.parent.parent.parent.cleanpath
+      srcdir + 'jobclass'
+    end
+
+    add_load_path primary_load_path
 
     def JobClass.get(id)
       unless CLASSES[id.to_s]
         begin
-          path = LOAD_PATH.map {|prefix| prefix + "#{id}.rb" }.detect(&:exist?)
+          path = LOAD_PATHES.map {|prefix| prefix + "#{id}.rb" }.detect(&:exist?)
           raise ParameterError, "no such job class: #{id}" unless path
           ::Bricolage.module_eval File.read(path), path.to_path, 1
         rescue SystemCallError => err
@@ -35,7 +49,7 @@ module Bricolage
     end
 
     def JobClass.list
-      LOAD_PATH.map {|dir|
+      LOAD_PATHES.map {|dir|
         Dir.glob("#{dir}/*.rb").map {|path| File.basename(path, '.rb') }
       }.flatten.uniq.sort
     end
