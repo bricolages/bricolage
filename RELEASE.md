@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.23.1
+
+- [new] streaming_load: new option --skip-work
+
 ## version 5.23.0
 
 - [CHANGE] Drops TD data source support from core.  Use separated bricolage-td gem.
