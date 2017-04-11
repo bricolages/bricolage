@@ -1,5 +1,5 @@
 /*
-    class: sql
+class: adhoc
 */
 
 <%= psql_serialize_vacuum_begin %>
