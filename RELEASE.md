@@ -1,5 +1,11 @@
 # Bricolage Release Note
 
+## version 5.23.2
+
+- [new] new job class: adhoc.
+  This job class have only one parameter, sql-file, so instance jobs are never affected by
+  defaults value such as analyze or grant.
+
 ## version 5.23.1
 
 - [new] streaming_load: new option --skip-work
