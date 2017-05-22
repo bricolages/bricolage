@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.23.3
+
+- [fix] mys3dump creates empty object even though if source table has no records.
+
 ## version 5.23.2
 
 - [new] new job class: adhoc.
