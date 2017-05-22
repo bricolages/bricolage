@@ -103,7 +103,7 @@ module Bricolage
     #
 
     def client
-      @client ||= Aws::S3::Client.new(region: @region, endpoint: @endpoint, access_key_id: access_key, secret_access_key: secret_key)
+      @client ||= Aws::S3::Client.new(region: @region, endpoint: @endpoint, access_key_id: access_key, secret_access_key: secret_key, logger: logger, log_level: :debug, http_wire_trace: true)
     end
 
     def bucket
