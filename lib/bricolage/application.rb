@@ -8,6 +8,7 @@ require 'bricolage/datasource'
 require 'bricolage/eventhandlers'
 require 'bricolage/postgresconnection'
 require 'bricolage/logfilepath'
+require 'bricolage/loglocatorbuilder'
 require 'bricolage/logger'
 require 'bricolage/exception'
 require 'bricolage/version'
@@ -61,11 +62,11 @@ module Bricolage
         job.explain
         exit 0
       end
+      @log_locator_builder = LogLocatorBuilder.for_options(@ctx, opts.log_path_format, opts.log_s3_ds, opts.log_s3_key_format)
 
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(job.id, [job]))
       @hooks.run_before_job_hooks(BeforeJobEvent.new(job))
-      log_path = opts.log_path_format ? build_log_path(opts.log_path_format, job) : nil
-      result = job.execute(log_path: log_path)
+      result = job.execute(log_locator: build_log_locator(job))
       @hooks.run_after_job_hooks(AfterJobEvent.new(result))
       @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(result.success?, [job]))
       exit result.status
@@ -77,8 +78,8 @@ module Bricolage
       error_exit ex.message
     end
 
-    def build_log_path(fmt, job)
-      fmt.format(
+    def build_log_locator(job)
+      @log_locator_builder.build(
         job_ref: JobNet::JobRef.new(job.subsystem, job.id, '-'),
         jobnet_id: "#{job.subsystem}/#{job.id}",
         job_start_time: @start_time,
@@ -169,6 +170,8 @@ module Bricolage
       @dry_run = false
       @explain = false
       @log_path_format = LogFilePath.default
+      @log_s3_ds = nil
+      @log_s3_key_format = nil
       @list_global_variables = false
       @list_variables = false
       @list_declarations = false
@@ -209,6 +212,13 @@ Global Options:
       }
       parser.on('--log-path=PATH', 'Log file path template.') {|path|
         @log_path_format = LogFilePath.new(path)
+      }
+      parser.on('--s3-log=DS_KEY', 'S3 log file. (format: "S3DS:KEY")') {|spec|
+        ds, k = spec.split(':', 2)
+        k = k.to_s.strip
+        key = k.empty? ? nil : k
+        @log_s3_ds = ds
+        @log_s3_key_format = LogFilePath.new(key || '%{std}.log')
       }
       parser.on('--list-job-class', 'Lists job class name and (internal) class path.') {
         JobClass.list.each do |name|
@@ -259,6 +269,9 @@ Global Options:
 
     attr_reader :job_file
     attr_reader :log_path_format
+
+    attr_reader :log_s3_ds
+    attr_reader :log_s3_key_format
 
     def file_mode?
       !!@job_file

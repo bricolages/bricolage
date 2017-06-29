@@ -27,26 +27,6 @@ module Bricolage
     def new_tmpfile_path(tmpdir = Dir.tmpdir)
       "#{tmpdir}/#{Time.now.to_i}_#{$$}_#{'%x' % Thread.current.object_id}_#{rand(2**16)}"
     end
-
-    # CLUDGE: FIXME: bricolage-jobnet command writes stderr to the file, we can find error messages from there.
-    # Using a temporary file or Ruby SQL driver is **MUCH** better.
-    def retrieve_last_match_from_stderr(re, nth = 0)
-      return unless $stderr.stat.file?
-      $stderr.flush
-      f = $stderr.dup
-      matched = nil
-      begin
-        f.seek(0)
-        f.each do |line|
-          m = line.slice(re, nth)
-          matched = m if m
-        end
-      ensure
-        f.close
-      end
-      matched = matched.to_s.strip
-      matched.empty? ? nil : matched
-    end
   end
 
 end

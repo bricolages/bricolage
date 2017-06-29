@@ -14,13 +14,13 @@ module Bricolage
       @template = template
     end
 
-    Params = Struct.new(:job_ref, :jobnet_id, :job_start_time, :jobnet_start_time)
-
     def format(job_ref:, jobnet_id:, job_start_time:, jobnet_start_time:)
       return nil unless @template
       params = Params.new(job_ref, jobnet_id, job_start_time, jobnet_start_time)
       fill_template(@template, params)
     end
+
+    Params = Struct.new(:job_ref, :jobnet_id, :job_start_time, :jobnet_start_time)
 
     def fill_template(template, params)
       template.gsub(/%\{\w+\}/) {|var|

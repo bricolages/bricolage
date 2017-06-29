@@ -8,6 +8,7 @@ require 'bricolage/datasource'
 require 'bricolage/variables'
 require 'bricolage/eventhandlers'
 require 'bricolage/logfilepath'
+require 'bricolage/loglocatorbuilder'
 require 'bricolage/logger'
 require 'bricolage/exception'
 require 'bricolage/version'
@@ -26,7 +27,6 @@ module Bricolage
       @hooks = ::Bricolage
       @jobnet_id = nil
       @jobnet_start_time = Time.now
-      @job_start_time = nil
     end
 
     EXIT_SUCCESS = JobResult::EXIT_SUCCESS
@@ -62,7 +62,8 @@ module Bricolage
         puts "OK"
         exit EXIT_SUCCESS
       end
-      run_queue queue, opts.log_path_format
+      @log_locator_builder = LogLocatorBuilder.for_options(@ctx, opts.log_path_format, opts.log_s3_ds, opts.log_s3_key_format)
+      run_queue queue
       exit EXIT_SUCCESS
     rescue OptionError => ex
       raise if $DEBUG
@@ -124,10 +125,10 @@ module Bricolage
       end
     end
 
-    def run_queue(queue, log_path_format)
+    def run_queue(queue)
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
       queue.consume_each do |task|
-        result = execute_job(task.job, queue, log_path_format)
+        result = execute_job(task.job, queue)
         unless result.success?
           logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
           logger.error "[job #{task.job}] #{result.message}"
@@ -140,14 +141,13 @@ module Bricolage
       logger.info "status all green"
     end
 
-    def execute_job(ref, queue, log_path_format)
+    def execute_job(ref, queue)
       logger.debug "job #{ref}"
-      @job_start_time = Time.now
+      job_start_time = Time.now
       job = Job.load_ref(ref, @ctx)
       job.compile
       @hooks.run_before_job_hooks(BeforeJobEvent.new(ref))
-      log_path = log_path_format ? build_log_path(log_path_format, ref) : nil
-      result = job.execute_in_process(log_path: log_path)
+      result = job.execute_in_process(log_locator: make_log_locator(ref, job_start_time))
       @hooks.run_after_job_hooks(AfterJobEvent.new(result))
       result
     rescue Exception => ex
@@ -156,11 +156,11 @@ module Bricolage
       JobResult.error(ex)
     end
 
-    def build_log_path(fmt, ref)
-      fmt.format(
+    def make_log_locator(ref, job_start_time)
+      @log_locator_builder.build(
         job_ref: ref,
         jobnet_id: @jobnet_id,
-        job_start_time: @job_start_time,
+        job_start_time: job_start_time,
         jobnet_start_time: @jobnet_start_time
       )
     end
@@ -192,7 +192,11 @@ module Bricolage
         @app = app
         @environment = nil
         @jobnet_files = nil
+
         @log_path_format = LogFilePath.default
+        @log_s3_ds = nil
+        @log_s3_key_format = nil
+
         @local_state_dir = Pathname('/tmp/bricolage')
         if path = ENV['BRICOLAGE_QUEUE_PATH']
           @enable_queue = true
@@ -204,8 +208,10 @@ module Bricolage
           @enable_queue = false
           @queue_path = nil
         end
+
         @check_only = false
         @list_jobs = false
+
         @global_variables = Variables.new
         @parser = OptionParser.new
         define_options @parser
@@ -213,7 +219,10 @@ module Bricolage
 
       attr_reader :environment
       attr_reader :jobnet_file
+
       attr_reader :log_path_format
+      attr_reader :log_s3_ds
+      attr_reader :log_s3_key_format
 
       attr_reader :local_state_dir
 
@@ -251,6 +260,13 @@ Options:
         }
         parser.on('--log-path=PATH', 'Log file path template.') {|path|
           @log_path_format = LogFilePath.new(path)
+        }
+        parser.on('--s3-log=DS_KEY', 'S3 log file. (format: "DS:KEY")') {|spec|
+          ds, k = spec.split(':', 2)
+          k = k.to_s.strip
+          key = k.empty? ? nil : k
+          @log_s3_ds = ds
+          @log_s3_key_format = LogFilePath.new(key || '%{std}.log')
         }
         parser.on('--local-state-dir=PATH', 'Stores local state in this path.') {|path|
           @local_state_dir = Pathname(path)

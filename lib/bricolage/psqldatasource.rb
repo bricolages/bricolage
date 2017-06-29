@@ -71,7 +71,7 @@ module Bricolage
             '--no-password',
             *options,
             env: get_psql_env
-        msg = retrieve_last_match_from_stderr(/^psql:.*?:\d+: ERROR: (.*)/, 1) unless st.success?
+        msg = LogLocator.slice_last_stderr(/^psql:.*?:\d+: ERROR: (.*)/, 1) unless st.success?
         JobResult.for_process_status(st, msg)
       }
     end

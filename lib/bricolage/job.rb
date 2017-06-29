@@ -55,7 +55,8 @@ module Bricolage
     end
 
     def init_global_variables
-      # Context#global_variables loads file on each call, fix global variables here.
+      # Context#global_variables loads file on each call,
+      # updating @global_variables is multi-thread safe.
       @global_variables = @context.global_variables
       @global_variables['bricolage_cwd'] = Dir.pwd
       @global_variables['bricolage_job_dir'] = @context.job_dir.to_s
@@ -135,14 +136,18 @@ module Bricolage
       @script.run_explain
     end
 
-    def execute(log_path: nil)
-      redirect_stdouts_to_log_file(log_path) { do_execute }
+    def execute(log_locator: LogLocator.empty)
+      log_locator.redirect_stdouts {
+        do_execute
+      }
     end
 
-    def execute_in_process(log_path:)
-      status_path = log_path ? "#{log_path}.status" : nil
+    def execute_in_process(log_locator:)
+      # ??? FIXME: status_path should be independent from log_path.
+      # Also, status_path should be defined regardless of log_path.
+      status_path = log_locator.path ? "#{log_locator.path}.status" : nil
       isolate_process(status_path) {
-        redirect_stdouts_to_log_file(log_path) {
+        log_locator.redirect_stdouts {
           do_execute
         }
       }
@@ -178,25 +183,6 @@ module Bricolage
       }
       _, st = Process.waitpid2(cpid)
       restore_result(st, status_path)
-    end
-
-    def redirect_stdouts_to_log_file(path)
-      return yield unless path
-      FileUtils.mkdir_p File.dirname(path)
-      @original_stdout = $stdout.dup
-      @original_stderr = $stderr.dup
-      begin
-        # Use 'w+' to make readable for retrieve_last_match_from_stderr
-        File.open(path, 'w+') {|f|
-          f.sync = true
-          $stdout.reopen f
-          $stderr.reopen f
-        }
-        return yield
-      ensure
-        $stdout.reopen @original_stdout; @original_stdout.close
-        $stderr.reopen @original_stderr; @original_stderr.close
-      end
     end
 
     def save_result(result, status_path)
