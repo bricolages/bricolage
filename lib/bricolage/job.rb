@@ -135,7 +135,22 @@ module Bricolage
       @script.run_explain
     end
 
-    def execute
+    def execute(log_path: nil)
+      redirect_stdouts_to_log_file(log_path) { do_execute }
+    end
+
+    def execute_in_process(log_path:)
+      status_path = log_path ? "#{log_path}.status" : nil
+      isolate_process(status_path) {
+        redirect_stdouts_to_log_file(log_path) {
+          do_execute
+        }
+      }
+    end
+
+    private
+
+    def do_execute
       ENV['BRICOLAGE_PID'] = Process.pid.to_s
       logger = @context.logger
       logger.info "#{@context.environment} environment"
@@ -154,60 +169,59 @@ module Bricolage
       return JobResult.error(ex)
     end
 
-    def execute_in_process(log_path)
-      isolate(log_path) {
-        execute
-      }
-    end
-
-    private
-
-    def isolate(log_path)
+    def isolate_process(status_path)
       cpid = Process.fork {
         Process.setproctitle "bricolage [#{@id}]"
-        redirect_stdouts_to log_path if log_path
         result = yield
-        save_result result, log_path
+        save_result result, status_path
         exit result.status
       }
       _, st = Process.waitpid2(cpid)
-      restore_result(st, log_path)
+      restore_result(st, status_path)
     end
 
-    def redirect_stdouts_to(path)
+    def redirect_stdouts_to_log_file(path)
+      return yield unless path
       FileUtils.mkdir_p File.dirname(path)
-      # make readable for retrieve_last_match_from_stderr
-      File.open(path, 'w+') {|f|
-        $stdout.reopen f
-        $stderr.reopen f
-      }
+      @original_stdout = $stdout.dup
+      @original_stderr = $stderr.dup
+      begin
+        # Use 'w+' to make readable for retrieve_last_match_from_stderr
+        File.open(path, 'w+') {|f|
+          f.sync = true
+          $stdout.reopen f
+          $stderr.reopen f
+        }
+        return yield
+      ensure
+        $stdout.reopen @original_stdout; @original_stdout.close
+        $stderr.reopen @original_stderr; @original_stderr.close
+      end
     end
 
-    def save_result(result, log_path)
+    def save_result(result, status_path)
       return if result.success?
-      return unless log_path
+      return unless status_path
       begin
-        File.open(error_log_path(log_path), 'w') {|f|
+        File.open(status_path, 'w') {|f|
           f.puts result.message
         }
       rescue
       end
     end
 
-    def restore_result(st, log_path)
-      JobResult.for_process_status(st, restore_message(log_path))
+    def restore_result(st, status_path)
+      JobResult.for_process_status(st, restore_message(status_path))
     end
 
-    def restore_message(log_path)
-      return nil unless log_path
-      msg = read_if_exist(error_log_path(log_path))
-      msg ? msg.strip : nil
-    ensure
-      FileUtils.rm_f error_log_path(log_path) if log_path
-    end
-
-    def error_log_path(log_path)
-      "#{log_path}.error"
+    def restore_message(status_path)
+      return nil unless status_path
+      begin
+        msg = read_if_exist(status_path)
+        msg ? msg.strip : nil
+      ensure
+        FileUtils.rm_f status_path
+      end
     end
 
     def read_if_exist(path)

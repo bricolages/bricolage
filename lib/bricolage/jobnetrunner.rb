@@ -27,7 +27,6 @@ module Bricolage
       @jobnet_id = nil
       @jobnet_start_time = Time.now
       @job_start_time = nil
-      @log_path = nil
     end
 
     EXIT_SUCCESS = JobResult::EXIT_SUCCESS
@@ -40,7 +39,6 @@ module Bricolage
       opts.parse ARGV
       @ctx = Context.for_application(job_path: opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
       @jobnet_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
-      @log_path = opts.log_path
       jobnet =
         if opts.jobnet_file.extname == '.job'
           RootJobNet.load_single_job(@ctx, opts.jobnet_file)
@@ -64,7 +62,7 @@ module Bricolage
         puts "OK"
         exit EXIT_SUCCESS
       end
-      run_queue queue
+      run_queue queue, opts.log_path_format
       exit EXIT_SUCCESS
     rescue OptionError => ex
       raise if $DEBUG
@@ -126,10 +124,10 @@ module Bricolage
       end
     end
 
-    def run_queue(queue)
+    def run_queue(queue, log_path_format)
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
       queue.consume_each do |task|
-        result = execute_job(task.job, queue)
+        result = execute_job(task.job, queue, log_path_format)
         unless result.success?
           logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
           logger.error "[job #{task.job}] #{result.message}"
@@ -142,13 +140,14 @@ module Bricolage
       logger.info "status all green"
     end
 
-    def execute_job(ref, queue)
+    def execute_job(ref, queue, log_path_format)
       logger.debug "job #{ref}"
       @job_start_time = Time.now
       job = Job.load_ref(ref, @ctx)
       job.compile
       @hooks.run_before_job_hooks(BeforeJobEvent.new(ref))
-      result = job.execute_in_process(instanciate_log_path(ref))
+      log_path = log_path_format ? build_log_path(log_path_format, ref) : nil
+      result = job.execute_in_process(log_path: log_path)
       @hooks.run_after_job_hooks(AfterJobEvent.new(result))
       result
     rescue Exception => ex
@@ -157,9 +156,8 @@ module Bricolage
       JobResult.error(ex)
     end
 
-    def instanciate_log_path(ref)
-      return nil unless @log_path
-      @log_path.format(
+    def build_log_path(fmt, ref)
+      fmt.format(
         job_ref: ref,
         jobnet_id: @jobnet_id,
         job_start_time: @job_start_time,
@@ -194,7 +192,7 @@ module Bricolage
         @app = app
         @environment = nil
         @jobnet_files = nil
-        @log_path = LogFilePath.default
+        @log_path_format = LogFilePath.default
         @local_state_dir = Pathname('/tmp/bricolage')
         if path = ENV['BRICOLAGE_QUEUE_PATH']
           @enable_queue = true
@@ -215,7 +213,7 @@ module Bricolage
 
       attr_reader :environment
       attr_reader :jobnet_file
-      attr_reader :log_path
+      attr_reader :log_path_format
 
       attr_reader :local_state_dir
 
@@ -249,10 +247,10 @@ Options:
           @environment = env
         }
         parser.on('-L', '--log-dir=PATH', 'Log file prefix.') {|path|
-          @log_path = LogFilePath.new("#{path}/%{std}.log")
+          @log_path_format = LogFilePath.new("#{path}/%{std}.log")
         }
         parser.on('--log-path=PATH', 'Log file path template.') {|path|
-          @log_path = LogFilePath.new(path)
+          @log_path_format = LogFilePath.new(path)
         }
         parser.on('--local-state-dir=PATH', 'Stores local state in this path.') {|path|
           @local_state_dir = Pathname(path)
