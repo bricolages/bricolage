@@ -90,7 +90,8 @@ module Bricolage
     attr_reader :path
 
     def job_id
-      @path.basename('.job').to_s
+      base = @path.basename('.job').to_s
+      File.basename(base, '.*')
     end
 
     def subsystem
