@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.24.0
+
+- [new] New config file config/bricolage.yml to save command line options in the file.
+- [new] New option --s3-log to upload log files to S3.
+
 ## version 5.23.3
 
 - [fix] mys3dump creates empty object even though if source table has no records.
