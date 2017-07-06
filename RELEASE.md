@@ -4,6 +4,8 @@
 
 - [new] New config file config/bricolage.yml to save command line options in the file.
 - [new] New option --s3-log to upload log files to S3.
+- [fix] Strips ".sql" from job ID, when the job is executed via *.sql.job file.
+- [fix] Strips all file extensions from jobnet ID, including ".job" or ".sql.job".
 
 ## version 5.23.3
 
