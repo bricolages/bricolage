@@ -36,18 +36,31 @@ module Bricolage
     def main
       opts = Options.new(self)
       @hooks.run_before_option_parsing_hooks(opts)
-      opts.parse ARGV
+      opts.parse!(ARGV)
+
       @ctx = Context.for_application(job_path: opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
+      opts.merge_saved_options(@ctx.load_system_options)
+
       jobnet = RootJobNet.load_auto(@ctx, opts.jobnet_file)
       @jobnet_id = jobnet.id
+
+      if opts.dump_options?
+        puts "jobnet-id=#{@jobnet_id}"
+        puts "jobnet-file=#{opts.jobnet_file}"
+        opts.option_pairs.each do |key, value|
+          puts "#{key}=#{value.inspect}"
+        end
+        exit EXIT_SUCCESS
+      end
+
       queue = get_queue(opts)
       if queue.locked?
         raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
       end
       unless queue.queued?
         enqueue_jobs jobnet, queue
-        logger.info "jobs are queued."
       end
+
       if opts.list_jobs?
         list_jobs queue
         exit EXIT_SUCCESS
@@ -57,6 +70,7 @@ module Bricolage
         puts "OK"
         exit EXIT_SUCCESS
       end
+
       @log_locator_builder = LogLocatorBuilder.for_options(@ctx, opts.log_path_format, opts.log_s3_ds, opts.log_s3_key_format)
       run_queue queue
       exit EXIT_SUCCESS
@@ -182,60 +196,40 @@ module Bricolage
       File.basename($PROGRAM_NAME, '.*')
     end
 
-    class Options
+    class Options < CommonApplicationOptions
       def initialize(app)
         @app = app
         @environment = nil
+        @global_variables = Variables.new
         @jobnet_files = nil
 
-        @log_path_format = LogFilePath.default
-        @log_s3_ds = nil
-        @log_s3_key_format = nil
-
-        @local_state_dir = Pathname('/tmp/bricolage')
-        if path = ENV['BRICOLAGE_QUEUE_PATH']
-          @enable_queue = true
-          @queue_path = Pathname(path)
-        elsif ENV['BRICOLAGE_ENABLE_QUEUE']
-          @enable_queue = true
-          @queue_path = nil
-        else
-          @enable_queue = false
-          @queue_path = nil
-        end
-
+        @dump_options = false
         @check_only = false
         @list_jobs = false
 
-        @global_variables = Variables.new
-        @parser = OptionParser.new
-        define_options @parser
+        init_options
       end
 
-      attr_reader :environment
-      attr_reader :jobnet_file
-
-      attr_reader :log_path_format
-      attr_reader :log_s3_ds
-      attr_reader :log_s3_key_format
-
-      attr_reader :local_state_dir
-
-      def enable_queue?
-        @enable_queue
+      def opts_default
+        super.merge({
+          'local-state-dir' => OptionValue.new('default value', nil),
+          'enable-queue' => OptionValue.new('default value', false),
+          'queue-path' => OptionValue.new('default value', '/tmp/bricolage')
+        })
       end
+      private :opts_default
 
-      attr_reader :queue_path
-
-      def check_only?
-        @check_only
+      def opts_env
+        env = super
+        if ENV['BRICOLAGE_ENABLE_QUEUE']
+          env['enable-queue'] = OptionValue.new('env BRICOLAGE_ENABLE_QUEUE', true)
+        end
+        if path = ENV['BRICOLAGE_QUEUE_PATH']
+          env['queue-path'] = OptionValue.new('env BRICOLAGE_QUEUE_PATH', path)
+        end
+        env
       end
-
-      def list_jobs?
-        @list_jobs
-      end
-
-      attr_reader :global_variables
+      private :opts_env
 
       def help
         @parser.help
@@ -250,27 +244,17 @@ Options:
         parser.on('-e', '--environment=NAME', "Sets execution environment. [default: #{Context::DEFAULT_ENV}]") {|env|
           @environment = env
         }
-        parser.on('-L', '--log-dir=PATH', 'Log file prefix.') {|path|
-          @log_path_format = LogFilePath.new("#{path}/%{std}.log")
-        }
-        parser.on('--log-path=PATH', 'Log file path template.') {|path|
-          @log_path_format = LogFilePath.new(path)
-        }
-        parser.on('--s3-log=DS_KEY', 'S3 log file. (format: "DS:KEY")') {|spec|
-          ds, k = spec.split(':', 2)
-          k = k.to_s.strip
-          key = k.empty? ? nil : k
-          @log_s3_ds = ds
-          @log_s3_key_format = LogFilePath.new(key || '%{std}.log')
-        }
+
+        define_common_options
+
         parser.on('--local-state-dir=PATH', 'Stores local state in this path.') {|path|
-          @local_state_dir = Pathname(path)
+          @opts_cmdline['local-state-dir'] = OptionValue.new('--local-state-dir option', path)
         }
         parser.on('-Q', '--enable-queue', 'Enables job queue.') {
-          @enable_queue = true
+          @opts_cmdline['enable-queue'] = OptionValue.new('--enable-queue option', true)
         }
         parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|
-          @queue_path = Pathname(path)
+          @opts_cmdline['queue-path'] = OptionValue.new('--queue-path option', path)
         }
         parser.on('-c', '--check-only', 'Checks job parameters and quit without executing.') {
           @check_only = true
@@ -281,6 +265,9 @@ Options:
         parser.on('-v', '--variable=NAME=VALUE', 'Defines global variable.') {|name_value|
           name, value = name_value.split('=', 2)
           @global_variables[name] = value
+        }
+        parser.on('--dump-options', 'Shows option parsing result and quit.') {
+          @dump_options = true
         }
         parser.on('--help', 'Shows this message and quit.') {
           @app.puts parser.help
@@ -296,13 +283,57 @@ Options:
         @parser.on(*args, &block)
       end
 
-      def parse(argv)
-        @parser.parse! argv
+      def parse!(argv)
+        @parser.parse!(argv)
         raise OptionError, "missing jobnet file" if argv.empty?
         raise OptionError, "too many jobnet file" if argv.size > 1
-        @jobnet_file = argv.map {|path| Pathname(path) }.first
+        @jobnet_file = Pathname(argv.first)
+        build_common_options!
       rescue OptionParser::ParseError => ex
         raise OptionError, ex.message
+      end
+
+      attr_reader :environment
+      attr_reader :jobnet_file
+
+      attr_reader :global_variables
+
+      def dump_options?
+        @dump_options
+      end
+
+      def check_only?
+        @check_only
+      end
+
+      def list_jobs?
+        @list_jobs
+      end
+
+      def local_state_dir
+        @local_state_dir ||= begin
+          opt = @opts['local-state-dir']
+          Pathname(opt.value)
+        end
+      end
+
+      def enable_queue?
+        opt = @opts['enable-queue']
+        opt.value
+      end
+
+      def queue_path
+        if opt = @opts['queue-path']
+          Pathname(opt.value)
+        else
+          nil
+        end
+      end
+
+      def option_pairs
+        common_options.merge({
+          'environment' => OptionValue.new(nil, @environment)
+        })
       end
     end
   end

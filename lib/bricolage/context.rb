@@ -85,6 +85,16 @@ module Bricolage
       :parameter_file_loader
 
     #
+    # System Parameters
+    #
+
+    SYSTEM_OPTION_FILE = 'bricolage.yml'
+
+    def load_system_options
+      load_variables_for_all_scopes(SYSTEM_OPTION_FILE)
+    end
+
+    #
     # Variables
     #
 
@@ -103,15 +113,20 @@ module Bricolage
       }
     end
 
+    GLOBAL_VARIABLE_FILE = 'variable.yml'
+
     def load_global_variables
-      subsys_path = scoped? ? [@filesystem.relative(GLOBAL_VARIABLE_FILE)] : []
-      vars_list = (config_pathes(GLOBAL_VARIABLE_FILE) + subsys_path).map {|path|
+      load_variables_for_all_scopes(GLOBAL_VARIABLE_FILE)
+    end
+
+    def load_variables_for_all_scopes(basename)
+      subsys_path = scoped? ? [@filesystem.relative(basename)] : []
+      vars_list = (config_pathes(basename) + subsys_path).map {|path|
         path.exist? ? load_variables(path) : nil
       }
       Variables.union(*vars_list.compact)
     end
-
-    GLOBAL_VARIABLE_FILE = 'variable.yml'
+    private :load_variables_for_all_scopes
 
     def load_variables(path)
       Variables.define {|vars|

@@ -37,15 +37,26 @@ module Bricolage
     def main
       opts = GlobalOptions.new(self)
       @hooks.run_before_option_parsing_hooks(opts)
-      opts.parse ARGV
+      opts.parse!(ARGV)
+
       @ctx = Context.for_application(opts.home, opts.job_file, environment: opts.environment, global_variables: opts.global_variables)
+      opts.merge_saved_options(@ctx.load_system_options)
+
+      if opts.dump_options?
+        opts.option_pairs.each do |name, value|
+          puts "#{name}=#{value.inspect}"
+        end
+        exit 0
+      end
       if opts.list_global_variables?
         list_variables @ctx.global_variables.resolve
         exit 0
       end
+
       job = load_job(@ctx, opts)
-      process_job_options job, opts
+      process_job_options(job, opts)
       job.compile
+
       if opts.list_declarations?
         list_declarations job.declarations
         exit 0
@@ -62,6 +73,7 @@ module Bricolage
         job.explain
         exit 0
       end
+
       @log_locator_builder = LogLocatorBuilder.for_options(@ctx, opts.log_path_format, opts.log_s3_ds, opts.log_s3_key_format)
 
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(job.id, [job]))
@@ -160,7 +172,124 @@ module Bricolage
     end
   end
 
-  class GlobalOptions
+  class CommonApplicationOptions
+    OptionValue = Struct.new(:location, :value)
+    class OptionValue
+      def inspect
+        if location
+          "#{value.inspect} (#{location})"
+        else
+          value.inspect
+        end
+      end
+    end
+
+    def init_options
+      @opts = nil   # valid only after #parse!
+      @opts_default = opts_default()
+      @opts_saved = {}
+      @opts_env = opts_env()
+      @opts_cmdline = {}
+      @parser = OptionParser.new
+      define_options @parser
+    end
+    private :init_options
+
+    attr_reader :parser
+
+    def opts_default
+      {
+        'log-path' => OptionValue.new('default value', nil),
+        'log-dir' => OptionValue.new('default value', nil),
+        's3-log' => OptionValue.new('default value', nil)
+      }
+    end
+    private :opts_default
+
+    def opts_env
+      env = {}
+      if path = ENV['BRICOLAGE_LOG_PATH']
+        env['log-path'] = OptionValue.new('env BRICOLAGE_LOG_PATH', path)
+      end
+      if path = ENV['BRICOLAGE_LOG_DIR']
+        env['log-dir'] = OptionValue.new('env BRICOLAGE_LOG_DIR', path)
+      end
+      env
+    end
+    private :opts_env
+
+    # abstract :define_options
+
+    def define_common_options
+      @parser.on('-L', '--log-dir=PATH', 'Log file prefix.') {|path|
+        @opts_cmdline['log-dir'] = OptionValue.new('--log-dir option', path)
+      }
+      @parser.on('--log-path=PATH', 'Log file path template.') {|path|
+        @opts_cmdline['log-path'] = OptionValue.new('--log-path option', path)
+      }
+      @parser.on('--s3-log=DS_KEY', 'S3 log file. (format: "DS:KEY")') {|spec|
+        @opts_cmdline['s3-log'] = OptionValue.new('--s3-log option', spec)
+      }
+    end
+    private :define_common_options
+
+    def merge_saved_options(vars)
+      saved = {}
+      @opts_default.keys.each do |key|
+        if val = vars.get_force(key)
+          saved[key] = OptionValue.new("bricolage.yml:#{key}", val)
+        end
+      end
+      @opts_saved = saved
+      build_common_options!
+    end
+
+    def build_common_options!
+      @opts = [@opts_default, @opts_saved, @opts_env, @opts_cmdline].inject({}) {|h, opts| h.update(opts); h }
+    end
+    private :build_common_options!
+
+    #
+    # Accessors
+    #
+
+    def common_options
+      @opts
+    end
+
+    def log_path_format
+      if opt = @opts['log-dir']
+        LogFilePath.new("#{opt.value}/%{std}.log")
+      elsif opt = @opts['log-path']
+        LogFilePath.new(opt.value)
+      else
+        nil
+      end
+    end
+
+    def log_s3_ds
+      s3_log_spec.first
+    end
+
+    def log_s3_key_format
+      s3_log_spec.last
+    end
+
+    def s3_log_spec
+      @s3_log_spec ||=
+        if opt = @opts['s3-log']
+          spec = opt.value
+          ds, k = spec.split(':', 2)
+          k = k.to_s.strip
+          key = k.empty? ? nil : k
+          [ds, LogFilePath.new(key || '%{std}.log')]
+        else
+          [nil, nil]
+        end
+    end
+  end
+
+  class GlobalOptions < CommonApplicationOptions
     def initialize(app)
       @app = app
       @job_file = nil
@@ -169,17 +298,12 @@ module Bricolage
       @global_variables = Variables.new
       @dry_run = false
       @explain = false
-      @log_path_format = LogFilePath.default
-      @log_s3_ds = nil
-      @log_s3_key_format = nil
       @list_global_variables = false
       @list_variables = false
       @list_declarations = false
-      @parser = OptionParser.new
-      define_options @parser
+      @dump_options = false
+      init_options
     end
-
-    attr_reader :parser
 
     def help
       @parser.help
@@ -207,19 +331,9 @@ Global Options:
       parser.on('-E', '--explain', 'Applies EXPLAIN to the SQL.') {
         @explain = true
       }
-      parser.on('-L', '--log-dir=PATH', 'Log file prefix.') {|path|
-        @log_path_format = LogFilePath.new("#{path}/%{std}.log")
-      }
-      parser.on('--log-path=PATH', 'Log file path template.') {|path|
-        @log_path_format = LogFilePath.new(path)
-      }
-      parser.on('--s3-log=DS_KEY', 'S3 log file. (format: "S3DS:KEY")') {|spec|
-        ds, k = spec.split(':', 2)
-        k = k.to_s.strip
-        key = k.empty? ? nil : k
-        @log_s3_ds = ds
-        @log_s3_key_format = LogFilePath.new(key || '%{std}.log')
-      }
+
+      define_common_options
+
       parser.on('--list-job-class', 'Lists job class name and (internal) class path.') {
         JobClass.list.each do |name|
           puts name
@@ -242,6 +356,9 @@ Global Options:
         name, value = name_value.split('=', 2)
         @global_variables[name] = value
       }
+      parser.on('--dump-options', 'Shows option parsing result and quit.') {
+        @dump_options = true
+      }
       parser.on('--help', 'Shows this message and quit.') {
         puts parser.help
         exit 0
@@ -256,22 +373,18 @@ Global Options:
       @parser.on(*args, &block)
     end
 
-    def parse(argv)
+    def parse!(argv)
       @parser.order! argv
       @rest_args = argv.dup
+      build_common_options!
     rescue OptionParser::ParseError => ex
       raise OptionError, ex.message
     end
 
     attr_reader :environment
     attr_reader :home
-    attr_reader :global_variables
 
     attr_reader :job_file
-    attr_reader :log_path_format
-
-    attr_reader :log_s3_ds
-    attr_reader :log_s3_key_format
 
     def file_mode?
       !!@job_file
@@ -285,6 +398,12 @@ Global Options:
       @explain
     end
 
+    def dump_options?
+      @dump_options
+    end
+
+    attr_reader :global_variables
+
     def list_global_variables?
       @list_global_variables
     end
@@ -295,6 +414,13 @@ Global Options:
 
     def list_declarations?
       @list_declarations
+    end
+
+    def option_pairs
+      common_options.merge({
+        'environment' => OptionValue.new(nil, @environment),
+        'home' => OptionValue.new(nil, @home)
+      })
     end
   end
 
