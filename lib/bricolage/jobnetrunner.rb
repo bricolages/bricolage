@@ -38,7 +38,7 @@ module Bricolage
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse ARGV
       @ctx = Context.for_application(job_path: opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
-      @jobnet_id = "#{opts.jobnet_file.dirname.basename}/#{opts.jobnet_file.basename('.jobnet')}"
+      @jobnet_id = get_jobnet_id(opts.jobnet_file)
       jobnet =
         if opts.jobnet_file.extname == '.job'
           RootJobNet.load_single_job(@ctx, opts.jobnet_file)
@@ -71,6 +71,11 @@ module Bricolage
     rescue ApplicationError => ex
       raise if $DEBUG
       error_exit ex.message
+    end
+
+    def get_jobnet_id(jobnet_file)
+      base = jobnet_file.basename.to_s.sub(/\..*\z/, '')
+      "#{jobnet_file.dirname.basename}/#{base}"
     end
 
     def logger
