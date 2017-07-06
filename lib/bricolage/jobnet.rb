@@ -5,25 +5,43 @@ module Bricolage
 
   # Represents "first" jobnet given by command line (e.g. bricolage-jobnet some.jobnet)
   class RootJobNet
+    def RootJobNet.load_auto(ctx, path)
+      if path.extname == '.job'
+        load_single_job(ctx, path)
+      else
+        load(ctx, path)
+      end
+    end
+
     def RootJobNet.load(ctx, path)
-      root = new(JobNet::FileLoader.new(ctx), JobNet.load(path))
+      root = new(JobNet::FileLoader.new(ctx), JobNet.load(path), path)
       root.load_recursive
       root.fix
       root
     end
 
     def RootJobNet.load_single_job(ctx, path)
-      root = new(JobNet::FileLoader.new(ctx), JobNet.load_single_job(path))
+      root = new(JobNet::FileLoader.new(ctx), JobNet.load_single_job(path), path)
       root.load_recursive
       root.fix
       root
     end
 
-    def initialize(jobnet_loader, start_jobnet)
+    def initialize(jobnet_loader, start_jobnet, path = nil)
       @jobnet_loader = jobnet_loader
       @start_jobnet = start_jobnet
+      @path = path
       @jobnets = {start_jobnet.ref => start_jobnet}
       @graph = nil
+    end
+
+    def id
+      return nil unless @path
+      @id ||= begin
+        subsys = @path.dirname.basename
+        base = @path.basename.to_s.sub(/\..*\z/, '')
+        "#{subsys}/#{base}"
+      end
     end
 
     attr_reader :start_jobnet
