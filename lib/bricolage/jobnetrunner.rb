@@ -212,9 +212,9 @@ module Bricolage
 
       def opts_default
         super.merge({
-          'local-state-dir' => OptionValue.new('default value', nil),
+          'local-state-dir' => OptionValue.new('default value', '/tmp/bricolage'),
           'enable-queue' => OptionValue.new('default value', false),
-          'queue-path' => OptionValue.new('default value', '/tmp/bricolage')
+          'queue-path' => OptionValue.new('default value', nil)
         })
       end
       private :opts_default
@@ -323,7 +323,8 @@ Options:
       end
 
       def queue_path
-        if opt = @opts['queue-path']
+        opt = @opts['queue-path']
+        if opt.value
           Pathname(opt.value)
         else
           nil
