@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.24.1
+
+- [fix] --enable-queue did not work
+
 ## version 5.24.0
 
 - [new] New config file config/bricolage.yml to save command line options in the file.
