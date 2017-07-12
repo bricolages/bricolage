@@ -258,9 +258,9 @@ module Bricolage
     end
 
     def log_path_format
-      if opt = @opts['log-dir']
+      if opt = @opts['log-dir'] and opt.value
         LogFilePath.new("#{opt.value}/%{std}.log")
-      elsif opt = @opts['log-path']
+      elsif opt = @opts['log-path'] and opt.value
         LogFilePath.new(opt.value)
       else
         nil
@@ -277,8 +277,7 @@ module Bricolage
 
     def s3_log_spec
       @s3_log_spec ||=
-        if opt = @opts['s3-log']
-          spec = opt.value
+        if opt = @opts['s3-log'] and spec = opt.value
           ds, k = spec.split(':', 2)
           k = k.to_s.strip
           key = k.empty? ? nil : k
