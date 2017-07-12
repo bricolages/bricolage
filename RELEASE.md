@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.24.2
+
+- [fix] --log-dir, --log-path and --s3-log options are wrongly not ommittable
+
 ## version 5.24.1
 
 - [fix] --enable-queue did not work
