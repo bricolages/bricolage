@@ -4,6 +4,7 @@ require 'bricolage/jobresult'
 require 'bricolage/parameters'
 require 'bricolage/variables'
 require 'bricolage/configloader'
+require 'bricolage/loglocator'
 require 'bricolage/exception'
 require 'fileutils'
 
