@@ -18,6 +18,10 @@ Running Test
 
 % rake test
 
+How to use
+------------
+
+See https://github.com/bricolages/bricolage/wiki
 
 Author
 ------
