@@ -226,7 +226,7 @@ module Bricolage
         raise JobFailure, "no such file: #{@src}" if source_files.empty?
         each_src_dest do |src, dest|
           ds.logger.info command_line(src, dest)
-          File.open(dest, 'w') do |f|
+          File.open(dest, 'wb') do |f|
             ds.client.get_object(bucket: ds.bucket_name, key: src) do |chunk|
               f.write(chunk)
             end
