@@ -287,7 +287,7 @@ module Bricolage
           lines.concat line.sub(/\A--/, '')
         when /\A--([\w\-]+):/
           key = $1
-          raise ParameterError, "unknown SQL meta data: #{source.name}: #{key}"
+          raise ParameterError, "unknown SQL meta data: #{source}: #{key}"
         when /\A--/
           # skip non-metadata comments
           lines.concat "\n"
