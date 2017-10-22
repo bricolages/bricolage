@@ -245,7 +245,7 @@ module Bricolage
     end
 
     def parse(source)
-      parse_meta(read_mata(source))
+      parse_meta(read_meta(source))
     end
 
     private
@@ -279,7 +279,7 @@ module Bricolage
 
     KEYS_RE = /\A--(?:#{DECLARATIONS.keys.join('|')}):/
 
-    def read_mata(source)
+    def read_meta(source)
       lines = ''
       source.each_line do |line|
         case line
@@ -287,7 +287,7 @@ module Bricolage
           lines.concat line.sub(/\A--/, '')
         when /\A--([\w\-]+):/
           key = $1
-          raise ParameterError, "unknown SQL meta data: #{source.name}: #{key}"
+          raise ParameterError, "unknown SQL meta data: #{source}: #{key}"
         when /\A--/
           # skip non-metadata comments
           lines.concat "\n"
