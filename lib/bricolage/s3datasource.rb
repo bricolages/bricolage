@@ -141,18 +141,22 @@ module Bricolage
   end
 
   class S3Task < DataSourceTask
+    def get(src, dest, check_args: true)
+      add Get.new(src, dest).tap {|action| action.check_arguments if check_args }
+    end
+
     def put(src, dest, check_args: true)
       add Put.new(src, dest).tap {|action| action.check_arguments if check_args }
     end
 
-    class Put < Action
+    module S3TaskHelper
       def initialize(src, dest)
         @src = src
         @dest = dest
       end
 
       def source_files
-        @source_files ||= Dir.glob(@src)
+        raise NotImplementedError
       end
 
       def single_source?
@@ -166,10 +170,6 @@ module Bricolage
         end
       end
 
-      def command_line(src, dest)
-        "aws s3 cp #{src} #{ds.url(dest)}"
-      end
-
       def check_arguments
       end
 
@@ -181,11 +181,56 @@ module Bricolage
         buf.string
       end
 
+      def command_line(src, dest)
+        raise NotImplementedError
+      end
+
+      def run
+        raise NotImplementedError
+      end
+    end
+
+    class Put < Action
+      include S3TaskHelper
+
+      def source_files
+        @source_files ||= Dir.glob(@src)
+      end
+
+      def command_line(src, dest)
+        "aws s3 cp #{src} #{ds.url(dest)}"
+      end
+
       def run
         raise JobFailure, "no such file: #{@src}" if source_files.empty?
         each_src_dest do |src, dest|
           ds.logger.info command_line(src, dest)
           ds.object(dest).upload_file(src)
+        end
+        nil
+      end
+    end
+
+    class Get < Action
+      include S3TaskHelper
+
+      def source_files
+        @source_files ||= ds.client.list_objects(bucket: ds.bucket_name, prefix: @src.to_s).contents.map(&:key)
+      end
+
+      def command_line(src, dest)
+        "aws s3 cp #{ds.url(src)} #{dest}"
+      end
+
+      def run
+        raise JobFailure, "no such file: #{@src}" if source_files.empty?
+        each_src_dest do |src, dest|
+          ds.logger.info command_line(src, dest)
+          File.open(dest, 'wb') do |f|
+            ds.client.get_object(bucket: ds.bucket_name, key: src) do |chunk|
+              f.write(chunk)
+            end
+          end
         end
         nil
       end
