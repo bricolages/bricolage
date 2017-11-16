@@ -232,13 +232,10 @@ module Bricolage
       def s3export
         cmd = build_cmd(environment_variables, command_parameters)
         ds.logger.info "[CMD] #{format_cmd(cmd)}"
-        Open3.popen2e(*cmd) do |input, output, thread|
-          input.close
-          output.each do |line|
-            puts line
-          end
-          unless thread.value.success?
-            raise JobFailure, "mys3dump failed (status #{thread.value.to_i})"
+        statuses = Open3.pipeline(cmd)
+        statuses.each_with_index do |st, idx|
+          unless st.success?
+            raise JobFailure, "mys3dump failed (status #{st.to_i})"
           end
         end
       end
