@@ -233,7 +233,7 @@ module Bricolage
         cmd = build_cmd(environment_variables, command_parameters)
         ds.logger.info "[CMD] #{format_cmd(cmd)}"
         statuses = Open3.pipeline(cmd)
-        statuses.each_with_index do |st, idx|
+        statuses.each do |st|
           unless st.success?
             raise JobFailure, "mys3dump failed (status #{st.to_i})"
           end
