@@ -233,6 +233,7 @@ module Bricolage
         cmd = build_cmd(command_parameters)
         ds.logger.info "[CMD] #{cmd}"
         out, st = Open3.capture2e(environment_variables, cmd)
+        ds.logger.info "[CMDOUT] #{out}"
         unless st.success?
           msg = extract_exception_message(out)
           raise JobFailure, "mys3dump failed (status: #{st.to_i}): #{msg}"
