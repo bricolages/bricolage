@@ -230,18 +230,13 @@ module Bricolage
       end
 
       def s3export
-        cmd = build_cmd(environment_variables, command_parameters)
-        ds.logger.info "[CMD] #{format_cmd(cmd)}"
-        statuses = Open3.pipeline(cmd)
-        statuses.each do |st|
-          unless st.success?
-            raise JobFailure, "mys3dump failed (status #{st.to_i})"
-          end
+        cmd = build_cmd(command_parameters)
+        ds.logger.info "[CMD] #{cmd}"
+        out, st = Open3.capture2e(environment_variables, cmd)
+        unless st.success?
+          msg = extract_exception_message(out)
+          raise JobFailure, "mys3dump failed (status: #{st.to_i}): #{msg}"
         end
-      end
-
-      def format_cmd(cmd)
-        cmd[1..-1].join(' ')   # do not show env
       end
 
       def environment_variables
@@ -303,8 +298,16 @@ module Bricolage
         Pathname(__dir__).parent.parent + "libexec/mys3dump.jar"
       end
 
-      def build_cmd(environ, options)
-        [environ, 'java'] + options.flat_map {|k, v| v ? ["-#{k}", v.to_s] : ["-#{k}"] }
+      def build_cmd(options)
+        (['java'] + options.flat_map {|k, v| v ? ["-#{k}", v.to_s] : ["-#{k}"] }.map {|o| %Q("#{o}") }).join(" ")
+      end
+
+      def extract_exception_message(out)
+        out.lines do |line|
+          if /^.*Exception: (?<msg>.*)$/ =~ line
+            return msg
+          end
+        end
       end
     end
 
