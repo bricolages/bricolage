@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.24.4
+
+- Improve error message with my-import job failure
+
 ## version 5.24.3
 
 - Support ECS task role with my-import job class
