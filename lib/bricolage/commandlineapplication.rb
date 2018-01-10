@@ -24,6 +24,7 @@ module Bricolage
     end
 
     attr_reader :name
+    attr_reader :options
 
     def define_default_options
       @options.on_tail('-e', '--environment=ENV', "Bricolage execution environment. (default: #{Context.environment})") {|env|
@@ -41,6 +42,7 @@ module Bricolage
 
     extend Forwardable
     def_delegator '@options', :on
+    def_delegator '@options', :help
 
     DataSourceOpt = Struct.new(:kind, :name, :ds)
 
