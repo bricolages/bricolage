@@ -49,7 +49,7 @@ module Bricolage
 
     def load_configurations
       @filesystem.config_pathes('prelude.rb').each do |path|
-        EmbeddedCodeAPI.module_eval(File.read(path)) if path.exist?
+        EmbeddedCodeAPI.module_eval(File.read(path), path.to_s, 1) if path.exist?
       end
       @data_sources = DataSourceFactory.load(self, @logger)
     end
