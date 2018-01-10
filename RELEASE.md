@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.24.5
+
+- [fix] __FILE__ or __dir__ was not correct in config/prelude.rb.
+- Better log output for my-import job class
+
 ## version 5.24.4
 
 - Improve error message with my-import job failure
