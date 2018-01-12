@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.25.0
+
+- Upgrade aws-sdk to v3 (aws-sdk-s3 v1).
+
 ## version 5.24.6
 
 - [fix] __FILE__ or __dir__ was not correct in config/prelude.rb.
