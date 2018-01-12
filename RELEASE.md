@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.25.1
+
+- [fix] Adds dependency to aws-sdk-sns.
+
 ## version 5.25.0
 
 - Upgrade aws-sdk to v3 (aws-sdk-s3 v1).
