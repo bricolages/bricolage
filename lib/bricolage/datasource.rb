@@ -114,7 +114,7 @@ module Bricolage
         begin
           require "bricolage/#{type}datasource"
         rescue LoadError
-          raise ParameterError, "no such SQL client type: #{type}"
+          raise ParameterError, "no such data source type: #{type}"
         end
         raise FatalError, "DataSource class does not exist: #{type}" unless CLASSES[type.to_s]
       end
