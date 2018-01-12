@@ -18,7 +18,7 @@ Gem::Specification.new do |s|
 
   s.required_ruby_version = '>= 2.0.0'
   s.add_dependency 'pg', '~> 0.18.0'
-  s.add_dependency 'aws-sdk', '~> 2'
+  s.add_dependency 'aws-sdk-s3', '~> 1'
   s.add_dependency 'mysql2'
   s.add_dependency 'redis', ">= 3.0.0"
   s.add_development_dependency 'test-unit'

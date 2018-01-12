@@ -1,7 +1,7 @@
 require 'bricolage/datasource'
 require 'bricolage/commandutils'
 require 'bricolage/exception'
-require 'aws-sdk'
+require 'aws-sdk-s3'
 require 'stringio'
 
 module Bricolage
