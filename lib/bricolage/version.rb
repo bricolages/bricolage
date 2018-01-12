@@ -1,4 +1,4 @@
 module Bricolage
   APPLICATION_NAME = 'Bricolage'
-  VERSION = '5.25.1'
+  VERSION = '5.26.0'
 end

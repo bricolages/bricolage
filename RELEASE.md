@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.26.0
+
+- [CHANGE] MySQL or Redis related job classes are separated into other gems, bricolage-mysql and bricolage-redis.
+  Use those gems if you need them.
+
 ## version 5.25.1
 
 - [fix] Adds dependency to aws-sdk-sns.
