@@ -253,6 +253,9 @@ Options:
         parser.on('-Q', '--enable-queue', 'Enables job queue.') {
           @opts_cmdline['enable-queue'] = OptionValue.new('--enable-queue option', true)
         }
+        parser.on('--disable-queue', 'Disables job queue.') {
+          @opts_cmdline['enable-queue'] = OptionValue.new('--disable-queue option', false)
+        }
         parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|
           @opts_cmdline['queue-path'] = OptionValue.new('--queue-path option', path)
         }
