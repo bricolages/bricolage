@@ -12,6 +12,7 @@ require 'bricolage/loglocatorbuilder'
 require 'bricolage/logger'
 require 'bricolage/exception'
 require 'bricolage/version'
+require 'fileutils'
 require 'pathname'
 require 'optparse'
 
@@ -53,6 +54,10 @@ module Bricolage
         exit EXIT_SUCCESS
       end
 
+      if opts.clear_queue?
+        clear_queue(opts)
+        exit EXIT_SUCCESS
+      end
       queue = get_queue(opts)
       if queue.locked?
         raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
@@ -84,6 +89,12 @@ module Bricolage
 
     def logger
       @ctx.logger
+    end
+
+    def clear_queue(opts)
+      if path = get_queue_file_path(opts)
+        FileUtils.rm_f path
+      end
     end
 
     def get_queue(opts)
@@ -206,6 +217,7 @@ module Bricolage
         @dump_options = false
         @check_only = false
         @list_jobs = false
+        @clear_queue = false
 
         init_options
       end
@@ -252,6 +264,12 @@ Options:
         }
         parser.on('-Q', '--enable-queue', 'Enables job queue.') {
           @opts_cmdline['enable-queue'] = OptionValue.new('--enable-queue option', true)
+        }
+        parser.on('--disable-queue', 'Disables job queue.') {
+          @opts_cmdline['enable-queue'] = OptionValue.new('--disable-queue option', false)
+        }
+        parser.on('--clear-queue', 'Clears job queue and quit.') {
+          @clear_queue = true
         }
         parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|
           @opts_cmdline['queue-path'] = OptionValue.new('--queue-path option', path)
@@ -329,6 +347,10 @@ Options:
         else
           nil
         end
+      end
+
+      def clear_queue?
+        @clear_queue
       end
 
       def option_pairs
