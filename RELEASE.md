@@ -1,5 +1,10 @@
 # Bricolage Release Note
 
+## version 5.27.0
+
+- [new] New option --disable-queue, to disable job queue explicitly.  This option overrides enable-queue option in bricolage.yml.
+- [new] New option --clear-queue, to clear job queue.
+
 ## version 5.26.0
 
 - [CHANGE] MySQL or Redis related job classes are separated into other gems, bricolage-mysql and bricolage-redis.
