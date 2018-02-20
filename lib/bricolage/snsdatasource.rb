@@ -1,5 +1,5 @@
 require 'bricolage/datasource'
-require 'aws-sdk'
+require 'aws-sdk-sns'
 
 module Bricolage
 
