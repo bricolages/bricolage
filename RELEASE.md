@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.27.1
+
+- [fix] SNS data source did not work.
+
 ## version 5.27.0
 
 - [new] New option --disable-queue, to disable job queue explicitly.  This option overrides enable-queue option in bricolage.yml.
