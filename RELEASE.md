@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.27.2
+
+- [fix] Supports `encoding` load option.
+
 ## version 5.27.1
 
 - [fix] SNS data source did not work.
