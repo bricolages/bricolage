@@ -483,21 +483,25 @@ module Bricolage
 
       # Make polymorphic?
       def to_s
-        case @value
-        when true   # acceptanydate
-          @name
-        when false   # compupdate false
-          "#{@name} false"
-        when 'on', 'off'
+        if @name == 'encoding'   # encoding utf16le
           "#{@name} #{@value}"
-        when String   # json 'auto'
-          "#{@name} '#{@value}'"
-        when Integer   # maxerror 10
-          "#{@name} #{@value}"
-        when nil       # (explicitly disable boolean options)
-          ''
         else
-          raise ParameterError, "unsupported type of option value for #{@name}: #{@value.inspect}"
+          case @value
+          when true      # acceptanydate
+            @name
+          when false     # compupdate false
+            "#{@name} false"
+          when 'on', 'off'
+            "#{@name} #{@value}"
+          when String    # json 'auto'
+            "#{@name} '#{@value}'"
+          when Integer   # maxerror 10
+            "#{@name} #{@value}"
+          when nil       # (explicitly disable boolean options)
+            ''
+          else
+            raise ParameterError, "unsupported option value type for #{@name}: #{@value.inspect}"
+          end
         end
       end
     end
