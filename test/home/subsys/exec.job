@@ -1,0 +1,4 @@
+class: exec
+env:
+  TEST_ENV: ok
+args: '/usr/bin/env | grep TEST_ENV'

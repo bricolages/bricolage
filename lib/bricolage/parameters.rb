@@ -604,8 +604,9 @@ module Bricolage
   end
 
   class StringListParam < Param
-    def initialize(name, arg_spec, description, optional: false, publish: false)
+    def initialize(name, arg_spec, description, optional: false, publish: false, allow_string: false)
       super name, arg_spec, description, optional: optional, publish: publish
+      @allow_string = allow_string
     end
 
     def parse_option_value(value, list)
@@ -614,7 +615,10 @@ module Bricolage
     end
 
     def parse_value(vals)
-      raise ParameterError, "bad type for parameter #{name}: #{vals.class}" unless vals.kind_of?(Array)
+      unless vals.kind_of?(Array)
+        raise ParameterError, "bad type for parameter #{name}: #{vals.class}" unless @allow_string
+        vals = [vals]
+      end
       vals.empty? ? nil : vals
     end
 
