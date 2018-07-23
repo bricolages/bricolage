@@ -23,6 +23,9 @@ module Bricolage
       f = JobFile.load(ctx, path)
       instantiate(f.job_id, f.class_id, ctx).tap {|job|
         job.bind_parameters f.values
+        f.global_variables.each do |name, value|
+          job.global_variables[name.to_s] = value
+        end
       }
     end
 

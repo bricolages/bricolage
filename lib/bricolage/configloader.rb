@@ -16,11 +16,19 @@ module Bricolage
     end
 
     def load_yaml(path)
-      parse_yaml(load_text(path), path)
+      parse_yaml(load_eruby(path), path)
     end
 
-    def load_text(path)
-      eruby(read_file(path), path)
+    def load_eruby(path)
+      eruby(load_file(path), path)
+    end
+
+    alias load_text load_eruby   # FIXME: obsolete
+
+    def load_file(path)
+      File.read(path)
+    rescue SystemCallError => err
+      raise ParameterError, "could not read file: #{err.message}"
     end
 
     def eruby(text, path)
@@ -37,12 +45,6 @@ module Bricolage
       YAML.load(text)
     rescue => err
       raise ParameterError, "#{path}: config file syntax error: #{err.message}"
-    end
-
-    def read_file(path)
-      File.read(path)
-    rescue SystemCallError => err
-      raise ParameterError, "could not read file: #{err.message}"
     end
 
     #
@@ -71,7 +73,7 @@ module Bricolage
     # $base_dir + "vars.yml" -> "$base_dir/vars.yml"
     # $base_dir + "/abs/path/vars.yml" -> "/abs/path/vars.yml"
     def read_config_file(path)
-      load_text(relative_path(Pathname(path)))
+      load_eruby(relative_path(Pathname(path)))
     end
   end
 
