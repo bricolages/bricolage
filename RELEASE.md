@@ -1,5 +1,12 @@
 # Bricolage Release Note
 
+## version 5.28.0
+
+- [new] bricolage command now accepts .rb.job, .py.job, .sh.job as a script-embedded job.
+- [new] new data sources file "datasource.yml", in addition to database.yml.  Users can continue to use database.yml, this does NOT introduce any incompatibility.
+- [new] exec: New option "env" to set additional environment variables.
+- [new] exec: Accepts single string value for args.
+
 ## version 5.27.2
 
 - [fix] Supports `encoding` load option.
