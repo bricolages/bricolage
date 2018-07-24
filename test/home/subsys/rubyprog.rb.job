@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+# class: exec
+# args: ["ruby", "$script"]
+
+puts "*.rb.job OK"

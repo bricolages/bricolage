@@ -1,23 +1,29 @@
 require 'bricolage/exception'
 require 'pathname'
+require 'stringio'
 
 module Bricolage
 
   class JobFile
     def JobFile.load(ctx, path)
-      values = if /\.sql\.job\z/ =~ path.to_s
-        load_embedded_definition(ctx, path)
-      else
-        ctx.parameter_file_loader.load_yaml(path)
-      end
+      values =
+        case path.to_s
+        when /\.sql\.job\z/
+          load_embedded_definition(ctx, path)
+        when /\.(?:rb|py|sh)\.job\z/
+          load_program_embedded_definition(ctx, path)
+        else
+          ctx.parameter_file_loader.load_yaml(path)
+        end
       parse(values, path)
     end
 
     class << JobFile
       private
 
+      # For .sql.job
       def load_embedded_definition(ctx, path)
-        sql = ctx.parameter_file_loader.load_text(path)
+        sql = ctx.parameter_file_loader.load_eruby(path)
         block = sql.slice(%r{\A/\*.*?^\*/}m) or
             raise ParameterError, "missing embedded job definition block: #{path}"
         yaml = block.sub(%r{\A/\*}, '').sub(%r{^\*/\s*\z}, '')
@@ -70,6 +76,30 @@ module Bricolage
         end
         decls
       end
+
+      # For .rb.job, .py.job, .sh.job ("#" comment style files)
+      # This method does NOT expand variables of parameter files.
+      def load_program_embedded_definition(ctx, path)
+        script = StringIO.new(ctx.parameter_file_loader.load_file(path))
+        first_line = script.gets
+        if first_line.start_with?('#!')
+          yaml_lines = []
+        else
+          yaml_lines = [first_line]
+        end
+        script.each_line do |line|
+          break unless line.start_with?('#')
+          yaml_lines.push line[1..-1]
+        end
+        yaml = yaml_lines.join
+
+        begin
+          values = YAML.load(yaml)
+        rescue => err
+          raise ParameterError, "#{path}: embedded job definition syntax error: #{err.message}"
+        end
+        values
+      end
     end
 
     def JobFile.parse(values, path)
@@ -96,6 +126,12 @@ module Bricolage
 
     def subsystem
       @path.parent.basename.to_s
+    end
+
+    def global_variables
+      {
+        'script' => @path.to_s
+      }
     end
   end
 
