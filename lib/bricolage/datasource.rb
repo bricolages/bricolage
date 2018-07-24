@@ -5,14 +5,19 @@ require 'bricolage/exception'
 module Bricolage
 
   class DataSourceFactory
+    DATA_SOURCE_FILE_NAME_1 = 'datasource.yml'
+    DATA_SOURCE_FILE_NAME_2 = 'database.yml'
+    PASSWORD_FILE_NAME = 'password.yml'
+
     def DataSourceFactory.load(context, logger)
       loader = Loader.new(context, logger)
-      loader.load_passwords
-      loader.load
+      loader.load_passwords(PASSWORD_FILE_NAME)
+      begin
+        return loader.load(DATA_SOURCE_FILE_NAME_1)
+      rescue ParameterError
+        return loader.load(DATA_SOURCE_FILE_NAME_2)
+      end
     end
-
-    DEFAULT_CONFIG_FILE_NAME = 'database.yml'
-    DEFAULT_PASSWORD_FILE_NAME = 'password.yml'
 
     class Loader < ConfigLoader
       def initialize(context, logger)
@@ -22,7 +27,7 @@ module Bricolage
         @passwords = nil
       end
 
-      def load_passwords(basename = DEFAULT_PASSWORD_FILE_NAME)
+      def load_passwords(basename)
         @context.config_pathes(basename).each do |path|
           if path.exist?
             @passwords = load_yaml(path)
@@ -31,11 +36,11 @@ module Bricolage
         end
       end
 
-      def load(basename = DEFAULT_CONFIG_FILE_NAME)
-        database_yml = @context.config_pathes(basename).detect {|path| path.exist? }
-        raise ParameterError, "database.yml does not exist" unless database_yml
-        @config_dir = database_yml.parent
-        DataSourceFactory.new(load_yaml(database_yml), @context, @logger)
+      def load(basename)
+        yml_path = @context.config_pathes(basename).detect(&:exist?)
+        raise ParameterError, "database.yml does not exist" unless yml_path
+        @config_dir = yml_path.parent
+        DataSourceFactory.new(load_yaml(yml_path), @context, @logger)
       end
 
       def password(name)
