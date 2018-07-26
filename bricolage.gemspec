@@ -10,10 +10,10 @@ Gem::Specification.new do |s|
 
   s.author = ['Minero Aoki']
   s.email = 'aamine@loveruby.net'
-  s.homepage = 'https://github.com/aamine/bricolage'
+  s.homepage = 'https://github.com/bricolages/bricolage'
 
-  s.executables = Dir.entries('bin').select {|ent| File.file?("bin/#{ent}") }
-  s.files = Dir.glob(['README.md', 'bin/*', 'lib/**/*.rb', 'libexec/**/*', 'jobclass/*.rb', 'test/**/*'])
+  s.files = `git ls-files -z`.split("\x0").reject {|f| f.match(%r{^(test|spec|features)/}) }
+  s.executables = s.files.grep(%r{bin/}).map {|path| File.basename(path) }
   s.require_path = 'lib'
 
   s.required_ruby_version = '>= 2.0.0'
@@ -21,7 +21,6 @@ Gem::Specification.new do |s|
   s.add_dependency 'aws-sdk-s3', '~> 1'
   s.add_dependency 'aws-sdk-sns', '~> 1'
   s.add_development_dependency 'test-unit'
-  s.add_development_dependency 'pry'
   s.add_development_dependency 'rake'
   s.add_development_dependency 'mocha'
 end
