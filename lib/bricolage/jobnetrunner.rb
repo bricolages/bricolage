@@ -236,6 +236,9 @@ module Bricolage
         if ENV['BRICOLAGE_ENABLE_QUEUE']
           env['enable-queue'] = OptionValue.new('env BRICOLAGE_ENABLE_QUEUE', true)
         end
+        if ENV['BRICOLAGE_DISABLE_QUEUE']
+          env['enable-queue'] = OptionValue.new('env BRICOLAGE_DISABLE_QUEUE', false)
+        end
         if path = ENV['BRICOLAGE_QUEUE_PATH']
           env['queue-path'] = OptionValue.new('env BRICOLAGE_QUEUE_PATH', path)
         end

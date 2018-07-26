@@ -4,6 +4,8 @@ require 'bricolage/exception'
 
 module Bricolage
 
+  class DataSourceFileNotExist < ParameterError; end
+
   class DataSourceFactory
     DATA_SOURCE_FILE_NAME_1 = 'datasource.yml'
     DATA_SOURCE_FILE_NAME_2 = 'database.yml'
@@ -14,7 +16,7 @@ module Bricolage
       loader.load_passwords(PASSWORD_FILE_NAME)
       begin
         return loader.load(DATA_SOURCE_FILE_NAME_1)
-      rescue ParameterError
+      rescue DataSourceFileNotExist
         return loader.load(DATA_SOURCE_FILE_NAME_2)
       end
     end
@@ -38,7 +40,7 @@ module Bricolage
 
       def load(basename)
         yml_path = @context.config_pathes(basename).detect(&:exist?)
-        raise ParameterError, "database.yml does not exist" unless yml_path
+        raise DataSourceFileNotExist, "database.yml does not exist" unless yml_path
         @config_dir = yml_path.parent
         DataSourceFactory.new(load_yaml(yml_path), @context, @logger)
       end
