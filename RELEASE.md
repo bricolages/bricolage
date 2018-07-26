@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.28.1
+
+- [new] new environment BRICOLAGE_DISABLE_QUEUE to disable jobnet queue.
+
 ## version 5.28.0
 
 - [new] bricolage command now accepts .rb.job, .py.job, .sh.job as a script-embedded job.
