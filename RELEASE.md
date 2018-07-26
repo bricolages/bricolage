@@ -3,6 +3,7 @@
 ## version 5.28.1
 
 - [new] new environment BRICOLAGE_DISABLE_QUEUE to disable jobnet queue.
+- [fix] Do not hide true ParameterError thrown from datasource.yml processing.
 
 ## version 5.28.0
 
