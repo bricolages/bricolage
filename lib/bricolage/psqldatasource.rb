@@ -71,7 +71,15 @@ module Bricolage
             '--no-password',
             *options,
             env: get_psql_env
-        msg = LogLocator.slice_last_stderr(/^psql:.*?:\d+: ERROR: (.*)/, 1) unless st.success?
+        unless st.success?
+          begin
+            msg = LogLocator.slice_last_stderr(/^psql:.*?:\d+: ERROR: (.*)/, 1)
+          rescue IOError => ex
+            # slice_last_stderr may fail if stderr is not a file
+            logger.error ex.message
+            msg = nil
+          end
+        end
         JobResult.for_process_status(st, msg)
       }
     end
