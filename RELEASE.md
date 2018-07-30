@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.29.1
+
+- [fix] PSQLDataSource: slice_last_stderr may fail when $stderr is not a regular file.
+
 ## version 5.29.0
 
 - [new] bricolage-jobnet command accepts multiple jobs/jobnets and executes them sequencially.
