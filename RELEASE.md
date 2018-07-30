@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.29.0
+
+- [new] bricolage-jobnet command accepts multiple jobs/jobnets and executes them sequencially.
+
 ## version 5.28.1
 
 - [new] new environment BRICOLAGE_DISABLE_QUEUE to disable jobnet queue.
