@@ -39,15 +39,15 @@ module Bricolage
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse!(ARGV)
 
-      @ctx = Context.for_application(job_path: opts.jobnet_file, environment: opts.environment, global_variables: opts.global_variables)
+      @ctx = Context.for_application(job_path: opts.jobnet_files.first, environment: opts.environment, global_variables: opts.global_variables)
       opts.merge_saved_options(@ctx.load_system_options)
 
-      jobnet = RootJobNet.load_auto(@ctx, opts.jobnet_file)
+      jobnet = RootJobNet.load_auto(@ctx, opts.jobnet_files)
       @jobnet_id = jobnet.id
 
       if opts.dump_options?
         puts "jobnet-id=#{@jobnet_id}"
-        puts "jobnet-file=#{opts.jobnet_file}"
+        puts "jobnet-file=#{opts.jobnet_files.first}"
         opts.option_pairs.each do |key, value|
           puts "#{key}=#{value.inspect}"
         end
@@ -307,15 +307,15 @@ Options:
       def parse!(argv)
         @parser.parse!(argv)
         raise OptionError, "missing jobnet file" if argv.empty?
-        raise OptionError, "too many jobnet file" if argv.size > 1
-        @jobnet_file = Pathname(argv.first)
+        @jobnet_files = argv.map {|path| Pathname(path) }
         build_common_options!
       rescue OptionParser::ParseError => ex
         raise OptionError, ex.message
       end
 
       attr_reader :environment
-      attr_reader :jobnet_file
+
+      attr_reader :jobnet_files
 
       attr_reader :global_variables
 

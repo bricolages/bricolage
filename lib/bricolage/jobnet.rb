@@ -5,11 +5,12 @@ module Bricolage
 
   # Represents "first" jobnet given by command line (e.g. bricolage-jobnet some.jobnet)
   class RootJobNet
-    def RootJobNet.load_auto(ctx, path)
-      if path.extname == '.job'
-        load_single_job(ctx, path)
+    def RootJobNet.load_auto(ctx, pathes)
+      pathes = Array(pathes)
+      if pathes.size == 1 and pathes.first.extname == '.jobnet'
+        load(ctx, pathes.first)
       else
-        load(ctx, path)
+        load_multiple_jobs(ctx, pathes)
       end
     end
 
@@ -21,7 +22,11 @@ module Bricolage
     end
 
     def RootJobNet.load_single_job(ctx, path)
-      root = new(JobNet::FileLoader.new(ctx), JobNet.load_single_job(path), path)
+      load_multiple_jobs(ctx, [path])
+    end
+
+    def RootJobNet.load_multiple_jobs(ctx, pathes)
+      root = new(JobNet::FileLoader.new(ctx), JobNet.load_multiple_jobs(pathes), pathes.first)
       root.load_recursive
       root.fix
       root
@@ -166,9 +171,28 @@ module Bricolage
     end
 
     def JobNet.load_single_job(path, ref = JobNetRef.for_job_path(path))
-      jobnet_script = ref.name.to_s
-      script_io = StringIO.new(jobnet_script)
-      Parser.new(ref).parse_stream(script_io)
+      load_multiple_jobs([path], ref)
+    end
+
+    def JobNet.load_multiple_jobs(pathes, ref = JobNetRef.for_job_path(pathes.first))
+      jobnet_script = StringIO.new
+      prev = nil
+      pathes.each do |path|
+        jobnet_script.print '-> ' if prev
+        case path.extname
+        when '.job'
+          r = JobRef.for_path(path)
+          jobnet_script.puts r.to_s
+        when '.jobnet'
+          r = JobNetRef.for_job_path(path)
+          jobnet_script.puts r.to_s
+        else
+          raise ParameterError, "is not a job nor a jobnet: #{path}"
+        end
+        prev = r
+      end
+      jobnet_script.rewind
+      Parser.new(ref).parse_stream(jobnet_script)
     end
 
     def initialize(ref, location)
@@ -364,6 +388,19 @@ module Bricolage
     end
 
     class JobRef < Ref
+      def JobRef.for_path(path)
+        new(path.parent.basename, JobRef.strip_exts(path), Location.dummy)
+      end
+
+      def JobRef.strip_exts(path)
+        basename = path
+        # remove all extnames
+        until (ext = basename.extname).empty?
+          basename = basename.basename(ext)
+        end
+        basename
+      end
+
       def net?
         false
       end
@@ -375,12 +412,7 @@ module Bricolage
       end
 
       def JobNetRef.for_job_path(path)
-        basename = path
-        # remove all extnames
-        until (ext = basename.extname).empty?
-          basename = basename.basename(ext)
-        end
-        new(path.parent.basename, basename, Location.dummy)
+        new(path.parent.basename, JobRef.strip_exts(path), Location.dummy)
       end
 
       def initialize(subsys, name, location)
