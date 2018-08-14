@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.29.2
+
+- [new] load: Allows to set jsonpath by direct S3 URL, instead of relative S3 key.
+
 ## version 5.29.1
 
 - [fix] PSQLDataSource: slice_last_stderr may fail when $stderr is not a regular file.
