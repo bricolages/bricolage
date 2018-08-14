@@ -348,9 +348,20 @@ module Bricolage
       when 'csv'
         %q(delimiter ',')
       when 'json'
-        jsonpath ? "json \'#{src_ds.url(jsonpath)}\'" : %q(json 'auto')
+        "json '#{json_param(jsonpath)}'"
       else
         raise ParameterError, "unsupported format: #{fmt}"
+      end
+    end
+
+    def json_param(jsonpath)
+      case jsonpath
+      when nil
+        'auto'
+      when %r{\As3://}
+        jsonpath
+      else
+        src_ds.url(jsonpath)
       end
     end
 
