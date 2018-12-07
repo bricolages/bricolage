@@ -13,6 +13,10 @@ See LICENSES file for details.
 
 % rake test
 
+## How to use
+
+See https://github.com/bricolages/bricolage/wiki
+
 ## Author
 
 Minero Aoki
