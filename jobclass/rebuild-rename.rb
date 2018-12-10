@@ -21,6 +21,7 @@ JobClass.define('rebuild-rename') {
 
   script {|params, script|
     script.task(params['data-source']) {|task|
+      dest_table = '$dest_table'
       prev_table = '${dest_table}_old'
       work_table = '${dest_table}_wk'
 
@@ -43,10 +44,9 @@ JobClass.define('rebuild-rename') {
 
       # RENAME
       task.transaction {
-        task.create_dummy_table '$dest_table'
-        dest_table = params['dest-table']
-        task.rename_table dest_table.to_s, "#{dest_table.name}_old"
-        task.rename_table "#{dest_table}_wk", dest_table.name
+        task.create_dummy_table dest_table
+        task.rename_table dest_table, prev_table
+        task.rename_table work_table, dest_table
       }
     }
   }

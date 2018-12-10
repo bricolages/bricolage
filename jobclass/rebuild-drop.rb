@@ -23,19 +23,19 @@ JobClass.define('rebuild-drop') {
     script.task(params['data-source']) {|task|
       task.transaction {
         # CREATE
-        task.drop_force params['dest-table']
+        task.drop_force '$dest_table'
         task.exec params['table-def']
 
         # INSERT
         task.exec params['sql-file']
 
         # GRANT
-        task.grant_if params['grant'], params['dest-table']
+        task.grant_if params['grant'], '$dest_table'
       }
 
       # VACUUM, ANALYZE
-      task.vacuum_if params['vacuum'], params['vacuum-sort'], params['dest-table']
-      task.analyze_if params['analyze'], params['dest-table']
+      task.vacuum_if params['vacuum'], params['vacuum-sort'], '$dest_table'
+      task.analyze_if params['analyze'], '$dest_table'
     }
   }
 }

@@ -17,7 +17,7 @@ JobClass.define('createview') {
       task.transaction {
         task.drop_view_force_if params['drop']
         task.exec params['sql-file']
-        task.grant_if params['grant'], params['dest-table']
+        task.grant_if params['grant'], '$dest_table'
       }
     }
   }

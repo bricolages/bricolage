@@ -18,7 +18,7 @@ JobClass.define('create') {
         task.drop_force_if params['drop']
         task.exec params['table-def']
         task.analyze_if params['analyze']
-        task.grant_if params['grant'], params['dest-table']
+        task.grant_if params['grant'], '$dest_table'
       }
     }
   }
