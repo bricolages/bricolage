@@ -35,9 +35,9 @@ JobClass.define('load') {
         task.transaction {
           task.drop_force '${dest_table}'
           task.exec params['table-def']
-          task.load params['src-ds'], params['src-file'], params['dest-table'],
+          task.load params['src-ds'], params['src-file'], '$dest_table',
               params['format'], params['jsonpath'], params['options']
-          task.grant_if params['grant'], params['dest-table']
+          task.grant_if params['grant'], '$dest_table'
         }
         # ANALYZE, VACUUM is needless for newly loaded table, skip always.
 
@@ -49,9 +49,9 @@ JobClass.define('load') {
 
         task.truncate_if params['truncate']
         task.transaction {
-          task.load params['src-ds'], params['src-file'], params['dest-table'],
+          task.load params['src-ds'], params['src-file'], '$dest_table',
               params['format'], params['jsonpath'], params['options']
-          task.grant_if params['grant'], params['dest-table']
+          task.grant_if params['grant'], '$dest_table'
         }
         # ANALYZE, VACUUM is needless for newly loaded table, skip always.
 
@@ -59,9 +59,9 @@ JobClass.define('load') {
         # load only pattern
 
         task.transaction {
-          task.load params['src-ds'], params['src-file'], params['dest-table'],
+          task.load params['src-ds'], params['src-file'], '$dest_table',
               params['format'], params['jsonpath'], params['options']
-          task.grant_if params['grant'], params['dest-table']
+          task.grant_if params['grant'], '$dest_table'
           task.analyze_if params['analyze']
         }
         # We cannot execute VACUUM in transaction

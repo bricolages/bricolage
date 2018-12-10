@@ -25,7 +25,7 @@ JobClass.define('sql') {
       task.exec params['sql-file']
       task.vacuum_if params['vacuum'], params['vacuum-sort']
       task.analyze_if params['analyze']
-      task.grant_if params['grant'], params['dest-table']
+      task.grant_if params['grant'], '$dest_table'
     }
   }
 }
