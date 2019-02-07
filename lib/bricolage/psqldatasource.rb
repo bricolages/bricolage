@@ -395,7 +395,7 @@ module Bricolage
     end
 
     def format_query(query)
-      query.gsub(/^--.*/, '').strip.gsub(/[ \t]*\n[ \t]*/, ' ').gsub("'", "\\\\'")
+      query.gsub(/^--.*/, '').strip.gsub(/[ \t]*\n[ \t]*/, ' ').gsub(/\\/,"\\\\\\\\").gsub("'", "\\\\'")
     end
   end
 
