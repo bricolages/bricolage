@@ -1,14 +1,18 @@
 class: streaming_load
 
-s3-ds: s3
-ctl-prefix: ctl
+ctl-ds: s3_ctl
+ctl-prefix: load_test/ctl
 keep-ctl: true
-queue-path: queue
-persistent-path: save/%Y/%m/%d
-file-name: "%Y%m%d-%H%M_%Q.txt"
+
+s3-ds: s3
+queue-path: load_test/queue
+persistent-path: load_test/save/%Y/%m/%d
+file-name: "%Y%m%d_%H%M_%Q.json"
 
 redshift-ds: sql
 dest-table: $test_schema.load_test
 work-table: $test_schema.load_test_wk
 log-table: $test_schema.load_test_l
-load-options: "delimiter '\\t'"
+load-options:
+    json: "auto"
+skip-work: true
