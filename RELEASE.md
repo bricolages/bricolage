@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 5.30.0
+
+- [new] streaming_load: new option --ctl-ds to change S3 data source for metadata files.
+
 ## version 5.29.2
 
 - [new] load: Allows to set jsonpath by direct S3 URL, instead of relative S3 key.
