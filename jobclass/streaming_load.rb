@@ -18,6 +18,7 @@ class StreamingLoadJobClass < RubyJobClass
         optional: true, default: Bricolage::PSQLLoadOptions.new,
         value_handler: lambda {|value, ctx, vars| Bricolage::PSQLLoadOptions.parse(value) })
     params.add Bricolage::DataSourceParam.new('s3', 's3-ds', 'S3 data source.')
+    params.add Bricolage::DataSourceParam.new('s3', 'ctl-ds', 'S3 data source for control files. (default: $s3-ds)', optional: true)
     params.add Bricolage::StringParam.new('ctl-prefix', 'S3_PREFIX', 'S3 object key prefix for control files. (default: ${queue-path}/ctl)', optional: true)
     params.add Bricolage::OptionalBoolParam.new('keep-ctl', 'Does not delete control files if true.')
     params.add Bricolage::StringParam.new('queue-path', 'S3_PATH', 'S3 path for data file queue.')
@@ -59,8 +60,6 @@ class StreamingLoadJobClass < RubyJobClass
 
   def make_loader(params)
     ds = params['redshift-ds']
-    load_opts = params['load-options']
-    load_opts.provide_defaults(params['s3-ds'])
     RedshiftStreamingLoader.new(
       data_source: ds,
       queue: make_s3_queue(params),
@@ -68,7 +67,7 @@ class StreamingLoadJobClass < RubyJobClass
       table: string(params['dest-table']),
       work_table: string(params['work-table']),
       log_table: string(params['log-table']),
-      load_options: load_opts,
+      load_options: params['load-options'],
       sql: params['sql-file'],
       logger: ds.logger,
       noop: params['noop'],
@@ -81,6 +80,7 @@ class StreamingLoadJobClass < RubyJobClass
     ds = params['s3-ds']
     S3Queue.new(
       data_source: ds,
+      ctl_ds: (params['ctl-ds'] || params['s3-ds']),
       ctl_prefix: (params['ctl-prefix'] || "#{params['queue-path']}/ctl"),
       queue_path: params['queue-path'],
       persistent_path: params['persistent-path'],
@@ -362,8 +362,9 @@ class StreamingLoadJobClass < RubyJobClass
   class S3Queue
     extend Forwardable
 
-    def initialize(data_source:, ctl_prefix:, queue_path:, persistent_path:, file_name:, logger:)
+    def initialize(data_source:, ctl_ds:, ctl_prefix:, queue_path:, persistent_path:, file_name:, logger:)
       @ds = data_source
+      @ctl_ds = ctl_ds
       @ctl_prefix = ctl_prefix
       @queue_path = queue_path
       @persistent_path = persistent_path
@@ -388,18 +389,18 @@ class StreamingLoadJobClass < RubyJobClass
     end
 
     def control_file_url(name)
-      @ds.url(control_file_path(name))
+      @ctl_ds.url(control_file_path(name))
     end
 
     def put_control_file(name, data, noop: false)
       @logger.info "s3 put: #{control_file_url(name)}"
-      @ds.object(control_file_path(name)).put(body: data) unless noop
+      @ctl_ds.object(control_file_path(name)).put(body: data) unless noop
       control_file_url(name)
     end
 
     def remove_control_file(name, noop: false)
       @logger.info "s3 delete: #{control_file_url(name)}"
-      @ds.object(control_file_path(name)).delete unless noop
+      @ctl_ds.object(control_file_path(name)).delete unless noop
     end
 
     def control_file_path(name)

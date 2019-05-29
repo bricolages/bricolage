@@ -328,7 +328,6 @@ module Bricolage
       unless src_ds.redshift_loader_source?
         raise ParameterError, "input data source does not support redshift as bulk loading source: #{src_ds.name}"
       end
-      opts.provide_defaults(src_ds)
       buf = StringIO.new
       buf.puts "copy #{dest_table}"
       buf.puts "from '#{src_ds.url(src_path)}'"
