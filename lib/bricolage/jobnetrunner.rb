@@ -98,12 +98,22 @@ module Bricolage
     end
 
     def get_queue(opts)
-      if path = get_queue_file_path(opts)
+      if check_result = check_connect_database(opts)
+        logger.info "DB connect: #{check_result}"
+        DatabaseTaskQueue.restore_if_exist(@ctx)
+      elsif path = get_queue_file_path(opts)
         logger.info "queue path: #{path}"
         FileTaskQueue.restore_if_exist(path)
       else
         TaskQueue.new
       end
+    end
+
+    def check_connect_database(opts)
+      if opts.db_name
+        opts.db_name
+      else
+        nil
     end
 
     def get_queue_file_path(opts)

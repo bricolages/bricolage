@@ -1,7 +1,9 @@
 require 'bricolage/jobnet'
+require 'bricolage/sqlutils'
 require 'bricolage/exception'
 require 'fileutils'
 require 'pathname'
+require 'pg'
 
 module Bricolage
 
@@ -131,6 +133,163 @@ module Bricolage
 
     def unlock_help
       "remove the file: #{lock_file_path}"
+    end
+  end
+
+  class DatabaseTaskQueue < TaskQueue
+    def DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      q = new(context, jobnet)
+      q.restore
+      q
+    end
+
+    def initialize(context, jobnet)
+      super()
+      @ctx = context
+      @ds = @ctx.get_data_source('psql', 'test_db')
+      @jobnet = jobnet
+      @subsys, @name = @jobnet.name.split('/')
+    end
+
+    def queued?
+      !@queue.empty?
+    end
+
+    def save
+      if @queue.empty?
+         clear
+         return
+      end
+
+      @ds.open do |conn|
+        conn.transaction {
+          @queue.each do |job_task|
+            conn.query_value(<<~SQL)
+              INSERT INTO  job_executions (status, job_id, started_at)
+              VALUES ('unlock', 1, NOW())
+              ON CONFLICT (job_id) DO NOTHING
+              --on conflict on constraint job_execution_fk_job
+              --do update set status=''
+              ;
+            SQL
+          end
+        }
+      end
+    end
+
+    def restore
+      job_lines = @ds.open do |conn| conn.query_values(<<~SQL)
+        select
+          jn.subsystem || '/' || jn.jobnet_name
+        from
+          job_executions je
+          join jobs j using(job_id)
+          join jobnets jn using(jobnet_id)
+        where
+          jn.subsystem = '#{@subsys}'
+          and jn.jobnet_name = '#{@name}'
+          and je.finished_at is null
+          and je.status <> 'succeeded'
+        ;
+        SQL
+      end
+
+      job_lines.each do |line|
+        enq JobTask.deserialize(line)
+      end
+    end
+
+    def clear
+      @ds.open do |conn| conn.execute(<<~SQL)
+        delete
+        from
+          job_executions
+        using
+          jobs, jobnets
+        where
+          job_executions.job_id = jobs.job_id
+          and jobs.jobnet_id = jobnets.jobnet_id
+          and jobnets.subsystem = '#{@subsys}'
+          and jobnets.jobnet_name = '#{@name}'
+        ;
+        SQL
+      end
+
+    end
+
+    def locked?
+      count = @ds.open do |conn| conn.query_value(<<~SQL)
+        select
+          count(1)
+        from
+          job_executions je
+          join jobs j using(job_id)
+          join jobnets jn using(jobnet_id)
+        where
+          jn.subsystem = '#{@subsys}'
+          and jn.jobnet_name = '#{@name}'
+          and je.status = 'lock'
+        ;
+        SQL
+      end
+      count.to_i > 0
+    end
+
+    def lock
+      @ds.open do |conn| conn.query_values(<<~SQL)
+        update
+          job_executions
+        set
+          status = 'lock'
+        from
+          job_executions je
+          join jobs j using(job_id)
+          join jobnets jn using(jobnet_id)
+        where
+          jn.subsystem = '#{@subsys}'
+          and jn.jobnet_name = '#{@name}'
+        ;
+        SQL
+      end
+    end
+
+    def unlock
+      @ds.open do |conn| conn.query_values(<<~SQL)
+        update
+          job_executions
+        set
+          status = 'unlock'
+        from
+          job_executions je
+          join jobs j using(job_id)
+          join jobnets jn using(jobnet_id)
+        where
+          jn.subsystem = '#{@subsys}'
+          and jn.jobnet_name = '#{@name}'
+        ;
+        SQL
+      end
+    end
+
+    def lock_records
+      @ds.open do |conn| conn.query_values(<<~SQL)
+        select
+          job_execution_id
+        from
+          job_executions je
+          join jobs j using(job_id)
+          join jobnets jn using(jobnet_id)
+        where
+          jn.subsystem = '#{@subsys}'
+          and jn.jobnet_name = '#{@name}'
+          and status = 'lock'
+        ;
+        SQL
+      end
+    end
+
+    def unlock_help
+      "remove the id records from job_executions: #{lock_records}"
     end
   end
 
