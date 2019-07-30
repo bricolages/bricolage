@@ -9,7 +9,7 @@ require 'bricolage/exception'
 require 'fileutils'
 
 module Bricolage
-  
+
   class Job
     # For JobNetRunner
     def Job.load_ref(ref, jobnet_context)
@@ -34,6 +34,19 @@ module Bricolage
       new(id, JobClass.get(class_id), ctx).tap {|job|
         job.init_global_variables
       }
+    end
+
+    def Job.create(jobnet_id, name, ds)
+      subsystem, job_name = name.split('/')
+      ds.open do |conn|
+        conn.execute(<<~SQL)
+          INSERT INTO jobs (subsystem, job_name, jobnet_id)
+            VALUES ('#{subsystem}', '#{job_name}', '#{jobnet_id}')
+            ON CONFLICT (subsystem, job_name, jobnet_id) DO NOTHING
+          ;
+        SQL
+      end
+
     end
 
     def initialize(id, job_class, context)
