@@ -138,21 +138,104 @@ module Bricolage
 
   class DatabaseTaskQueue < TaskQueue
     def DatabaseTaskQueue.restore_if_exist(context, jobnet)
-      q = new(context, jobnet)
+      datasource = context.get_data_source('psql', 'test_db')
+
+      jobnet_id = JobNet.find_or_create(jobnet.name, datasource)
+      jobs = jobnet.refs - [jobnet.start, *jobnet.net_refs, jobnet.end]
+      jobs.each {|job| Job.create(jobnet_id, job.to_s, datasource) }
+
+      q = new(datasource, jobnet, jobs)
+
       q.restore
+      q.allocate unless q.queued?
       q
     end
 
-    def initialize(context, jobnet)
+    def initialize(datasource, jobnet, jobs)
       super()
-      @ctx = context
-      @ds = @ctx.get_data_source('psql', 'test_db')
+      @ds = datasource
       @jobnet = jobnet
       @subsys, @name = @jobnet.name.split('/')
+      @jobs = jobs
     end
 
     def queued?
       !@queue.empty?
+    end
+
+    def consume_each
+      lock
+      while task = self.next
+        dequeuing
+        yield task
+        dequeued
+      end
+    ensure
+      unlock
+    end
+
+    def enq(task)
+      subsys, name = task.job.to_s.split('/')
+      @ds.open do |conn| conn.query_values(<<~SQL)
+        UPDATE
+          job_executions
+        SET
+          status = 'waiting',
+          submitted_at = NOW(),
+          started_at = null,
+          finished_at = null
+        FROM
+          job_executions je
+          JOIN jobs j using(job_id)
+        WHERE
+          j.subsystem = '#{subsys}'
+          AND j.job_name = '#{name}'
+        ;
+        SQL
+      end
+      @queue.push task
+    end
+
+    def dequeuing
+      task = @queue.first
+      subsys, name = task.job.to_s.split('/')
+      @ds.open do |conn| conn.query_values(<<~SQL)
+        UPDATE
+          job_executions
+        SET
+          status = 'running',
+          started_at = NOW()
+        FROM
+          job_executions je
+          JOIN jobs j using(job_id)
+        WHERE
+          j.subsystem = '#{subsys}'
+          AND j.job_name = '#{name}'
+        ;
+        SQL
+      end
+      task
+    end
+
+    def dequeued
+      task = @queue.shift
+      subsys, name = task.job.to_s.split('/')
+      @ds.open do |conn| conn.query_values(<<~SQL)
+        UPDATE
+          job_executions
+        SET
+          status = 'succeeded',
+          finished_at = NOW()
+        FROM
+          job_executions je
+          JOIN jobs j using(job_id)
+        WHERE
+          j.subsystem = '#{subsys}'
+          AND j.job_name = '#{name}'
+        ;
+        SQL
+      end
+      task
     end
 
     def save
@@ -164,12 +247,18 @@ module Bricolage
       @ds.open do |conn|
         conn.transaction {
           @queue.each do |job_task|
+            subsys, name = job_task.job.to_s.split('/')
             conn.query_value(<<~SQL)
-              INSERT INTO  job_executions (status, job_id, started_at)
-              VALUES ('unlock', 1, NOW())
-              ON CONFLICT (job_id) DO NOTHING
-              --on conflict on constraint job_execution_fk_job
-              --do update set status=''
+              UPDATE
+                job_executions
+              SET
+                status = 'running'
+              FROM
+                job_executions je
+                JOIN jobs j using(job_id)
+              WHERE
+                j.subsystem = '#{subsys}'
+                AND j.job_name = '#{name}'
               ;
             SQL
           end
@@ -189,7 +278,7 @@ module Bricolage
           jn.subsystem = '#{@subsys}'
           and jn.jobnet_name = '#{@name}'
           and je.finished_at is null
-          and je.status <> 'succeeded'
+          and (je.status = 'running' or je.status = 'failed')
         ;
         SQL
       end
@@ -199,22 +288,26 @@ module Bricolage
       end
     end
 
-    def clear
-      @ds.open do |conn| conn.execute(<<~SQL)
-        delete
-        from
-          job_executions
-        using
-          jobs, jobnets
-        where
-          job_executions.job_id = jobs.job_id
-          and jobs.jobnet_id = jobnets.jobnet_id
-          and jobnets.subsystem = '#{@subsys}'
-          and jobnets.jobnet_name = '#{@name}'
-        ;
-        SQL
+    def allocate
+      # job execution insert or update
+      @ds.open do |conn|
+        conn.transaction {
+          @jobs.each do |job|
+            subsys, name = job.to_s.split('/')
+            conn.execute(<<~SQL)
+              INSERT INTO  job_executions (status, job_id, lock, started_at)
+              SELECT 'waiting', job_id, false, NOW()
+              FROM jobs
+              WHERE subsystem='#{subsys}' AND job_name='#{name}'
+              ON CONFLICT  DO NOTHING
+              ;
+            SQL
+          end
+        }
       end
 
+
+      # job execution state
     end
 
     def locked?
@@ -228,7 +321,7 @@ module Bricolage
         where
           jn.subsystem = '#{@subsys}'
           and jn.jobnet_name = '#{@name}'
-          and je.status = 'lock'
+          and je.lock
         ;
         SQL
       end
@@ -237,17 +330,17 @@ module Bricolage
 
     def lock
       @ds.open do |conn| conn.query_values(<<~SQL)
-        update
+        UPDATE
           job_executions
-        set
-          status = 'lock'
-        from
+        SET
+          lock = true
+        FROM
           job_executions je
-          join jobs j using(job_id)
-          join jobnets jn using(jobnet_id)
-        where
+          JOIN jobs j using(job_id)
+          JOIN jobnets jn using(jobnet_id)
+        WHERE
           jn.subsystem = '#{@subsys}'
-          and jn.jobnet_name = '#{@name}'
+          AND jn.jobnet_name = '#{@name}'
         ;
         SQL
       end
@@ -255,17 +348,17 @@ module Bricolage
 
     def unlock
       @ds.open do |conn| conn.query_values(<<~SQL)
-        update
+        UPDATE
           job_executions
-        set
-          status = 'unlock'
-        from
+        SET
+          lock = false
+        FROM
           job_executions je
-          join jobs j using(job_id)
-          join jobnets jn using(jobnet_id)
-        where
+          JOIN jobs j using(job_id)
+          JOIN jobnets jn using(jobnet_id)
+        WHERE
           jn.subsystem = '#{@subsys}'
-          and jn.jobnet_name = '#{@name}'
+          AND jn.jobnet_name = '#{@name}'
         ;
         SQL
       end
@@ -273,16 +366,16 @@ module Bricolage
 
     def lock_records
       @ds.open do |conn| conn.query_values(<<~SQL)
-        select
+        SELECT
           job_execution_id
-        from
+        FROM
           job_executions je
-          join jobs j using(job_id)
-          join jobnets jn using(jobnet_id)
-        where
+          JOIN jobs j using(job_id)
+          JOIN jobnets jn using(jobnet_id)
+        WHERE
           jn.subsystem = '#{@subsys}'
-          and jn.jobnet_name = '#{@name}'
-          and status = 'lock'
+          AND jn.jobnet_name = '#{@name}'
+          AND je.lock
         ;
         SQL
       end
@@ -290,6 +383,25 @@ module Bricolage
 
     def unlock_help
       "remove the id records from job_executions: #{lock_records}"
+    end
+
+    # for debug to test
+    def clear
+      @ds.open do |conn| conn.execute(<<~SQL)
+        UPDATE
+          job_executions
+        SET
+          status = 'succeeded'
+        FROM
+          job_executions je
+          JOIN jobs j using(job_id)
+          JOIN jobnets jn using(jobnet_id)
+        WHERE
+          jn.subsystem = '#{@subsys}'
+          AND jn.jobnet_name = '#{@name}'
+        ;
+        SQL
+      end
     end
   end
 

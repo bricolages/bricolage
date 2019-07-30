@@ -58,7 +58,7 @@ module Bricolage
         clear_queue(opts)
         exit EXIT_SUCCESS
       end
-      queue = get_queue(opts)
+      queue = get_queue(opts, jobnet)
       if queue.locked?
         raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
       end
@@ -97,10 +97,10 @@ module Bricolage
       end
     end
 
-    def get_queue(opts)
+    def get_queue(opts, jobnet)
       if check_result = check_connect_database(opts)
         logger.info "DB connect: #{check_result}"
-        DatabaseTaskQueue.restore_if_exist(@ctx)
+        DatabaseTaskQueue.restore_if_exist(@ctx, jobnet)
       elsif path = get_queue_file_path(opts)
         logger.info "queue path: #{path}"
         FileTaskQueue.restore_if_exist(path)
