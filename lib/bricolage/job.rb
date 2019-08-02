@@ -46,7 +46,6 @@ module Bricolage
           ;
         SQL
       end
-
     end
 
     def initialize(id, job_class, context)

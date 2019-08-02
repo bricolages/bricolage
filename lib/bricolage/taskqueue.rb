@@ -1,6 +1,9 @@
 require 'bricolage/jobnet'
 require 'bricolage/sqlutils'
 require 'bricolage/exception'
+require 'bricolage/dao/job'
+require 'bricolage/dao/jobnet'
+require 'bricolage/dao/jobexecution'
 require 'fileutils'
 require 'pathname'
 require 'pg'
@@ -137,25 +140,28 @@ module Bricolage
   end
 
   class DatabaseTaskQueue < TaskQueue
-    def DatabaseTaskQueue.restore_if_exist(context, jobnet)
+    def DatabaseTaskQueue.restore_if_exist(context, jobnet_ref)
       datasource = context.get_data_source('psql', 'test_db')
 
-      jobnet_id = JobNet.find_or_create(jobnet.name, datasource)
-      jobs = jobnet.refs - [jobnet.start, *jobnet.net_refs, jobnet.end]
-      jobs.each {|job| Job.create(jobnet_id, job.to_s, datasource) }
+      subsys, jobnet_name = jobnet_ref.name.delete('*').split('/')
+      job_refs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
+      jobnet = Bricolage::DAO::JobNet.new(datasource).find_or_create(subsys, jobnet_name)
+      jobs = job_refs.map do |jobref|
+        Bricolage::DAO::Job.new(datasource).find_or_create(subsys, jobref.name, jobnet.id)
+      end
 
-      q = new(datasource, jobnet, jobs)
+      q = new(datasource, subsys, jobnet_name, jobs)
 
       q.restore
       q.allocate unless q.queued?
       q
     end
 
-    def initialize(datasource, jobnet, jobs)
+    def initialize(datasource, subsys, jobnet_name, jobs)
       super()
       @ds = datasource
-      @jobnet = jobnet
-      @subsys, @name = @jobnet.name.split('/')
+      @subsys = subsys
+      @jobnet_name = jobnet_name
       @jobs = jobs
     end
 
@@ -176,209 +182,76 @@ module Bricolage
 
     def enq(task)
       subsys, name = task.job.to_s.split('/')
-      @ds.open do |conn| conn.query_values(<<~SQL)
-        UPDATE
-          job_executions
-        SET
-          status = 'waiting',
-          submitted_at = NOW(),
-          started_at = null,
-          finished_at = null
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-        WHERE
-          j.subsystem = '#{subsys}'
-          AND j.job_name = '#{name}'
-        ;
-        SQL
-      end
+
+      Bricolage::DAO::JobExecution.new(@ds)
+        .update(where: {subsystem: subsys, job_name: name},
+                set:   {status: 'waiting', submitted_at: :now, started_at: nil, finished_at: nil})
       @queue.push task
     end
 
     def dequeuing
       task = @queue.first
       subsys, name = task.job.to_s.split('/')
-      @ds.open do |conn| conn.query_values(<<~SQL)
-        UPDATE
-          job_executions
-        SET
-          status = 'running',
-          started_at = NOW()
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-        WHERE
-          j.subsystem = '#{subsys}'
-          AND j.job_name = '#{name}'
-        ;
-        SQL
-      end
+
+      Bricolage::DAO::JobExecution.new(@ds)
+        .update(where: {subsystem: subsys, job_name: name},
+                set:   {status: 'running', started_at: :now})
       task
     end
 
     def dequeued
       task = @queue.shift
       subsys, name = task.job.to_s.split('/')
-      @ds.open do |conn| conn.query_values(<<~SQL)
-        UPDATE
-          job_executions
-        SET
-          status = 'succeeded',
-          finished_at = NOW()
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-        WHERE
-          j.subsystem = '#{subsys}'
-          AND j.job_name = '#{name}'
-        ;
-        SQL
-      end
+
+      Bricolage::DAO::JobExecution.new(@ds)
+        .update(where: {subsystem: subsys, job_name: name},
+                set:   {status: 'succeeded', finished_at: :now})
       task
     end
 
-    def save
-      if @queue.empty?
-         clear
-         return
-      end
-
-      @ds.open do |conn|
-        conn.transaction {
-          @queue.each do |job_task|
-            subsys, name = job_task.job.to_s.split('/')
-            conn.query_value(<<~SQL)
-              UPDATE
-                job_executions
-              SET
-                status = 'running'
-              FROM
-                job_executions je
-                JOIN jobs j using(job_id)
-              WHERE
-                j.subsystem = '#{subsys}'
-                AND j.job_name = '#{name}'
-              ;
-            SQL
-          end
-        }
-      end
-    end
-
     def restore
-      job_lines = @ds.open do |conn| conn.query_values(<<~SQL)
-        select
-          jn.subsystem || '/' || jn.jobnet_name
-        from
-          job_executions je
-          join jobs j using(job_id)
-          join jobnets jn using(jobnet_id)
-        where
-          jn.subsystem = '#{@subsys}'
-          and jn.jobnet_name = '#{@name}'
-          and je.finished_at is null
-          and (je.status = 'running' or je.status = 'failed')
-        ;
-        SQL
-      end
+      job_executions = Bricolage::DAO::JobExecution.new(@ds)
+                         .find_by(subsystem: @subsys,
+                                  jobnet_name: @jobnet_name,
+                                  finished_at: nil,
+                                  status: ['running', 'failed'])
 
-      job_lines.each do |line|
+      job_executions.each do |je|
+        line = "#{je.subsystem}/#{je.job_name}"
         enq JobTask.deserialize(line)
       end
     end
 
     def allocate
-      # job execution insert or update
-      @ds.open do |conn|
-        conn.transaction {
-          @jobs.each do |job|
-            subsys, name = job.to_s.split('/')
-            conn.execute(<<~SQL)
-              INSERT INTO  job_executions (status, job_id, lock, started_at)
-              SELECT 'waiting', job_id, false, NOW()
-              FROM jobs
-              WHERE subsystem='#{subsys}' AND job_name='#{name}'
-              ON CONFLICT  DO NOTHING
-              ;
-            SQL
-          end
-        }
+      @jobs.each do |job|
+        Bricolage::DAO::JobExecution.new(@ds)
+          .upsert(where:  {subsystem: job.subsystem, job_name: job.job_name},
+                  set: {status: 'waiting', job_id: job.id, lock: false})
       end
-
-
-      # job execution state
     end
 
     def locked?
-      count = @ds.open do |conn| conn.query_value(<<~SQL)
-        select
-          count(1)
-        from
-          job_executions je
-          join jobs j using(job_id)
-          join jobnets jn using(jobnet_id)
-        where
-          jn.subsystem = '#{@subsys}'
-          and jn.jobnet_name = '#{@name}'
-          and je.lock
-        ;
-        SQL
-      end
-      count.to_i > 0
+      count = Bricolage::DAO::JobExecution.new(@ds)
+                .find_by(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
+                .count
+      count > 0
     end
 
     def lock
-      @ds.open do |conn| conn.query_values(<<~SQL)
-        UPDATE
-          job_executions
-        SET
-          lock = true
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-          JOIN jobnets jn using(jobnet_id)
-        WHERE
-          jn.subsystem = '#{@subsys}'
-          AND jn.jobnet_name = '#{@name}'
-        ;
-        SQL
-      end
+      Bricolage::DAO::JobExecution.new(@ds)
+        .update(where: {subsystem: @subsys, jobnet_name: @jobnet_name},
+                set:   {lock: true})
     end
 
     def unlock
-      @ds.open do |conn| conn.query_values(<<~SQL)
-        UPDATE
-          job_executions
-        SET
-          lock = false
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-          JOIN jobnets jn using(jobnet_id)
-        WHERE
-          jn.subsystem = '#{@subsys}'
-          AND jn.jobnet_name = '#{@name}'
-        ;
-        SQL
-      end
+      Bricolage::DAO::JobExecution.new(@ds)
+        .update(where: {subsystem: @subsys, jobnet_name: @jobnet_name},
+                set:   {lock: false})
     end
 
     def lock_records
-      @ds.open do |conn| conn.query_values(<<~SQL)
-        SELECT
-          job_execution_id
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-          JOIN jobnets jn using(jobnet_id)
-        WHERE
-          jn.subsystem = '#{@subsys}'
-          AND jn.jobnet_name = '#{@name}'
-          AND je.lock
-        ;
-        SQL
-      end
+      Bricolage::DAO::JobExecution.new(@ds)
+        .find_by(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
     end
 
     def unlock_help
@@ -387,21 +260,9 @@ module Bricolage
 
     # for debug to test
     def clear
-      @ds.open do |conn| conn.execute(<<~SQL)
-        UPDATE
-          job_executions
-        SET
-          status = 'succeeded'
-        FROM
-          job_executions je
-          JOIN jobs j using(job_id)
-          JOIN jobnets jn using(jobnet_id)
-        WHERE
-          jn.subsystem = '#{@subsys}'
-          AND jn.jobnet_name = '#{@name}'
-        ;
-        SQL
-      end
+      Bricolage::DAO::JobExecution.new(@ds)
+        .update(where: {subsystem: @subsys, jobnet_name: @jobnet_name},
+                set:   {status: 'succeeded'})
     end
   end
 

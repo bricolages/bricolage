@@ -214,7 +214,6 @@ module Bricolage
         SQL
         return jobnet_id.to_i if jobnet_id
       end
-
     end
 
     def initialize(ref, location)

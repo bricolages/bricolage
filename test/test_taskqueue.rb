@@ -68,8 +68,7 @@ module Bricolage
       assert_equal 0, queue1.size
       queue1.enq jobtask1
       queue1.enq jobtask2
-      queue1.save
-
+      queue1.dequeuing
       queue2 = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       assert_equal 2, queue2.size
     end
@@ -78,14 +77,12 @@ module Bricolage
       queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       assert_false queue.queued?
       queue.enq jobtask1
-      queue.save
       assert_true  queue.queued?
     end
 
     test "#lock" do
       queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       queue.enq jobtask1
-      queue.save
       assert_false queue.locked?
       queue.lock
       assert_true  queue.locked?
@@ -94,7 +91,6 @@ module Bricolage
     test "#unlock" do
       queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       queue.enq jobtask1
-      queue.save
       queue.lock
       assert_true  queue.locked?
       queue.unlock
