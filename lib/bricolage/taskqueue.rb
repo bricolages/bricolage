@@ -141,9 +141,7 @@ module Bricolage
   end
 
   class DatabaseTaskQueue < TaskQueue
-    def DatabaseTaskQueue.restore_if_exist(context, jobnet_ref)
-      datasource = context.get_data_source('psql', 'test_db')
-
+    def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref)
       subsys, jobnet_name = jobnet_ref.name.delete('*').split('/')
       job_refs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
       jobnet = Bricolage::DAO::JobNet.new(datasource).find_or_create(subsys, jobnet_name)

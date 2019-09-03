@@ -50,6 +50,7 @@ module Bricolage
 
   class TestDatabaseTaskQueue < Test::Unit::TestCase
     context = Context.for_application(home_path='test/home')
+    datasource = context.get_data_source('psql', 'test_db')
     jobnet_path = Pathname.new('test/home/subsys/net1.jobnet')
     jobnet = RootJobNet.load_auto(context, [jobnet_path]).jobnets.first
     jobrefs = jobnet.refs - [jobnet.start, *jobnet.net_refs, jobnet.end]
@@ -57,30 +58,30 @@ module Bricolage
     jobtask2 = JobTask.new(jobrefs.pop)
 
     teardown do
-      queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       queue.unlock
       queue.clear
     end
 
     test "DatabaseTaskQueue.restore_if_exist" do
-      queue1 = DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      queue1 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       assert_equal 0, queue1.size
       queue1.enqueue jobtask1
       queue1.enqueue jobtask2
       queue1.dequeuing
-      queue2 = DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      queue2 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       assert_equal 2, queue2.size
     end
 
     test "#save" do
-      queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       assert_false queue.queued?
       queue.enqueue jobtask1
       assert_true  queue.queued?
     end
 
     test "#lock" do
-      queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       queue.enqueue jobtask1
       assert_false queue.locked?
       queue.lock
@@ -88,7 +89,7 @@ module Bricolage
     end
 
     test "#unlock" do
-      queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
+      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       queue.enqueue jobtask1
       queue.lock
       assert_true  queue.locked?
