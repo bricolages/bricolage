@@ -92,14 +92,16 @@ module Bricolage
     end
 
     def clear_queue(opts)
-      if path = get_queue_file_path(opts)
+      if opts.db_name
+        opts ## TODO
+      elsif path = get_queue_file_path(opts)
         FileUtils.rm_f path
       end
     end
 
     def get_queue(opts, jobnet)
-      if check_result = check_connect_database(opts)
-        logger.info "DB connect: #{check_result}"
+      if opts.db_name
+        logger.info "DB connect: #{opts.db_name}"
         DatabaseTaskQueue.restore_if_exist(@ctx, jobnet)
       elsif path = get_queue_file_path(opts)
         logger.info "queue path: #{path}"
@@ -107,13 +109,6 @@ module Bricolage
       else
         TaskQueue.new
       end
-    end
-
-    def check_connect_database(opts)
-      if opts.db_name
-        opts.db_name
-      else
-        nil
     end
 
     def get_queue_file_path(opts)
@@ -137,7 +132,7 @@ module Bricolage
     def enqueue_jobs(jobnet, queue)
       seq = 1
       jobnet.sequential_jobs.each do |ref|
-        queue.enq JobTask.new(ref)
+        queue.enqueue JobTask.new(ref)
         seq += 1
       end
       queue.save
@@ -159,16 +154,16 @@ module Bricolage
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
       queue.consume_each do |task|
         result = execute_job(task.job, queue)
-        unless result.success?
-          logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
-          logger.error "[job #{task.job}] #{result.message}"
-          @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(false, queue))
-          exit result.status
-        end
       end
-      @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(true, queue))
+      @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(result.success?, queue))
       logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
-      logger.info "status all green"
+
+      if result.success?
+        logger.info "status all green"
+      else
+        logger.error "[job #{task.job}] #{result.message}"
+        exit result.status
+      end
     end
 
     def execute_job(ref, queue)

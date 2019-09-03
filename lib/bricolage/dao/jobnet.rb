@@ -2,38 +2,48 @@ module Bricolage
   module DAO
     class JobNet
 
-      JobNet = Struct.new(:id, :subsystem, :jobnet_name)
+      Attributes = Struct.new(:id, :subsystem, :jobnet_name)
 
       def initialize(datasource)
         @datasource = datasource
+        @conn = @datasource.open
       end
 
       def find(subsystem, jobnet_name)
-        jobnet = @datasource.open do |conn|
-          conn.query_row(<<~SQL)
-          SELECT *  FROM jobnets WHERE subsystem = '#{subsystem}' AND jobnet_name = '#{jobnet_name}';
-          SQL
-        end
+        jobnet = @conn.query_row(<<~SQL)
+          select
+              jobnet_id
+              , "subsystem"
+              , jobnet_name
+          from
+              jobnets
+          where
+              "subsystem" = '#{subsystem}'
+              and jobnet_name = '#{jobnet_name}'
+          ;
+        SQL
 
-        JobNet.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name']) unless jobnet.empty?
+        if jobnet.empty?
+          []
+        else
+          Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])
+        end
       end
 
-      def create(subsystem, jobnet_name)
-        jobnet = @datasource.open do |conn|
-          conn.query_row(<<~SQL)
-          INSERT INTO jobnets (subsystem, jobnet_name)
-            VALUES ('#{subsystem}', '#{jobnet_name}')
-            ON CONFLICT (subsystem, jobnet_name) DO NOTHING
-            RETURNING jobnet_id, subsystem, jobnet_name
+      def create_if_not_exist(subsystem, jobnet_name)
+        jobnet = @conn.query_row(<<~SQL)
+          insert into jobnets ("subsystem", jobnet_name)
+              values ('#{subsystem}', '#{jobnet_name}')
+              on conflict ("subsystem", jobnet_name) do nothing
+              returning jobnet_id, "subsystem", jobnet_name
           ;
-          SQL
-        end
+        SQL
 
-        JobNet.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name']) unless jobnet.empty?
+        Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])
       end
 
       def find_or_create(subsystem, jobnet_name)
-        find(subsystem, jobnet_name) || create(subsystem, jobnet_name)
+        find(subsystem, jobnet_name) || create_if_not_exist(subsystem, jobnet_name)
       end
     end
   end

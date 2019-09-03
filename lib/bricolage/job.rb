@@ -36,18 +36,6 @@ module Bricolage
       }
     end
 
-    def Job.create(jobnet_id, name, ds)
-      subsystem, job_name = name.split('/')
-      ds.open do |conn|
-        conn.execute(<<~SQL)
-          INSERT INTO jobs (subsystem, job_name, jobnet_id)
-            VALUES ('#{subsystem}', '#{job_name}', '#{jobnet_id}')
-            ON CONFLICT (subsystem, job_name, jobnet_id) DO NOTHING
-          ;
-        SQL
-      end
-    end
-
     def initialize(id, job_class, context)
       @id = id
       @job_class = job_class

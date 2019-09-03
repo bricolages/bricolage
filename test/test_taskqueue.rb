@@ -5,7 +5,6 @@ require 'bricolage/jobnet'
 require 'bricolage/taskqueue'
 require 'pathname'
 require 'pp'
-require 'pry'
 
 module Bricolage
   class TestFileTaskQueue < Test::Unit::TestCase
@@ -28,7 +27,7 @@ module Bricolage
     test "#save" do
       queue = FileTaskQueue.restore_if_exist(temp_queue_path)
       assert_false queue.queued?
-      queue.enq JobTask.new('test_dummy_job_task')
+      queue.enqueue JobTask.deserialize('subsys/test_dummy_job_task')
       queue.save
       assert_true  queue.queued?
     end
@@ -66,8 +65,8 @@ module Bricolage
     test "DatabaseTaskQueue.restore_if_exist" do
       queue1 = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       assert_equal 0, queue1.size
-      queue1.enq jobtask1
-      queue1.enq jobtask2
+      queue1.enqueue jobtask1
+      queue1.enqueue jobtask2
       queue1.dequeuing
       queue2 = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       assert_equal 2, queue2.size
@@ -76,13 +75,13 @@ module Bricolage
     test "#save" do
       queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
       assert_false queue.queued?
-      queue.enq jobtask1
+      queue.enqueue jobtask1
       assert_true  queue.queued?
     end
 
     test "#lock" do
       queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
-      queue.enq jobtask1
+      queue.enqueue jobtask1
       assert_false queue.locked?
       queue.lock
       assert_true  queue.locked?
@@ -90,7 +89,7 @@ module Bricolage
 
     test "#unlock" do
       queue = DatabaseTaskQueue.restore_if_exist(context, jobnet)
-      queue.enq jobtask1
+      queue.enqueue jobtask1
       queue.lock
       assert_true  queue.locked?
       queue.unlock

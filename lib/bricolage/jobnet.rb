@@ -195,27 +195,6 @@ module Bricolage
       Parser.new(ref).parse_stream(jobnet_script)
     end
 
-    def JobNet.find_or_create(name, ds)
-      subsystem, jobnet_name = name.split('/')
-      job_lines = ds.open do |conn|
-        jobnet_id = conn.query_value(<<~SQL)
-          INSERT INTO jobnets (subsystem, jobnet_name)
-            VALUES ('#{subsystem}', '#{jobnet_name}')
-            ON CONFLICT (subsystem, jobnet_name) DO NOTHING
-            RETURNING jobnet_id
-          ;
-        SQL
-        return jobnet_id.to_i if jobnet_id
-
-        jobnet_id = conn.query_value(<<~SQL)
-          SELECT jobnet_id
-          FROM jobnets
-          WHERE subsystem='#{subsystem}' AND jobnet_name='#{jobnet_name}';
-        SQL
-        return jobnet_id.to_i if jobnet_id
-      end
-    end
-
     def initialize(ref, location)
       @ref = ref
       @location = location

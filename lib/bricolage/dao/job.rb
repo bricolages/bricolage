@@ -2,38 +2,50 @@ module Bricolage
   module DAO
     class Job
 
-      Job = Struct.new(:id, :subsystem, :job_name, :jobnet_id)
+      Attributes = Struct.new(:id, :subsystem, :job_name, :jobnet_id)
 
       def initialize(datasource)
         @datasource = datasource
+        @conn = @datasource.open
       end
 
       def find(subsystem, job_name, jobnet_id)
-        job = @datasource.open do |conn|
-          conn.query_row(<<~SQL)
-          SELECT * FROM jobs WHERE subsystem = '#{subsystem}' AND job_name = '#{job_name}' AND jobnet_id = #{jobnet_id};
-          SQL
-        end
+        job = @conn.query_row(<<~SQL)
+          select
+              "job_id"
+              , "subsystem"
+              , "job_name"
+              , jobnet_id
+          from
+              jobs
+          where
+              "subsystem" = '#{subsystem}'
+              and "job_name" = '#{job_name}'
+              and jobnet_id = #{jobnet_id}
+          ;
+        SQL
 
-        Job.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id']) unless job.empty?
+        if job.empty?
+          []
+        else
+          Attributes.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id'])
+        end
       end
 
-      def create(subsystem, job_name, jobnet_id)
-        job = @datasource.open do |conn|
-          conn.query_row(<<~SQL)
-          INSERT INTO jobs (subsystem, job_name, jobnet_id)
-            VALUES ('#{subsystem}', '#{job_name}', #{jobnet_id})
-            ON CONFLICT (subsystem, job_name, jobnet_id) DO NOTHING
-            RETURNING job_id, subsystem, job_name, jobnet_id
+      def create_if_not_exist(subsystem, job_name, jobnet_id)
+        job = @conn.query_row(<<~SQL)
+          insert into jobs ("subsystem", "job_name", jobnet_id)
+              values ('#{subsystem}', '#{job_name}', #{jobnet_id})
+              on conflict ("subsystem", "job_name", jobnet_id) do nothing
+              returning "job_id", "subsystem", "job_name", jobnet_id
           ;
-          SQL
-        end
+        SQL
 
-        Job.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id']) unless job.empty?
+        Attributes.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id'])
       end
 
       def find_or_create(subsystem, job_name, jobnet_id)
-        find(subsystem, job_name, jobnet_id) || create(subsystem, job_name, jobnet_id)
+        find(subsystem, job_name, jobnet_id) || create_if_not_exist(subsystem, job_name, jobnet_id)
       end
     end
   end

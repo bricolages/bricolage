@@ -2,101 +2,87 @@ module Bricolage
   module DAO
     class JobExecution
 
-      JobExecution = Struct.new(:jobnet_id, :subsystem, :job_id, :job_execution_id,
+      Attributes = Struct.new(:jobnet_id, :subsystem, :job_id, :job_execution_id,
                                 :status, :message, :submitted_at, :lock,
                                 :started_at, :finished_at, :source, :job_name, :jobnet_name,
                                 keyword_init: true)
 
       def initialize(datasource)
         @datasource = datasource
+        @conn = @datasource.open
       end
 
       def find_by(**args)
-        where_clause = DAO.parse_where(args)
+        where_clause = DAO.compile_where_expr(args)
 
-        job_executions = @datasource.open do |conn|
-          conn.query_rows(<<~SQL)
-          SELECT
-            *
-          FROM
-            job_executions je
-            JOIN jobs j using(job_id)
-            JOIN jobnets jn using(jobnet_id, subsystem)
-          WHERE #{where_clause}
-          ;
-          SQL
-        end
-
-        JobExecution.to_struct(job_executions)
-      end
-
-      def update(where:, set:)
-        set_clause = set.reject{|k,v| v.nil?}.map{|k,v| "#{k} = #{DAO.convert_value(v)}"}.join(', ')
-        where_clause = DAO.parse_where(where)
-
-        job_executions = @datasource.open do |conn|
-          conn.query_rows(<<~SQL)
-          UPDATE
-              job_executions
-          SET
-              #{set_clause}
-          FROM
+        job_executions = @conn.query_rows(<<~SQL)
+          select
+              *
+          from
               job_executions je
-              JOIN jobs j using(job_id)
-              JOIN jobnets jn using(jobnet_id, subsystem)
-          WHERE
+              join jobs j using(job_id)
+              join jobnets jn using(jobnet_id, "subsystem")
+          where
               #{where_clause}
-          RETURNING *
           ;
-          SQL
-        end
-        job_executions = JobExecution.to_struct(job_executions)
+        SQL
 
-        JobExecutionState.job_executions_change(@datasource, job_executions)
-
-        job_executions
-      end
-
-      def upsert(where:, set:)
-        set_columns, set_values = DAO.parse_set(set)
-        where_clause = DAO.parse_where(where)
-
-        job_executions = @datasource.open do |conn|
-          conn.query_rows(<<~SQL)
-          INSERT INTO
-              job_executions (#{set_columns})
-          SELECT
-              #{set_values}
-          FROM
-              jobs
-          WHERE
-              #{where_clause}
-          ON CONFLICT  DO NOTHING
-          RETURNING *
-          ;
-          SQL
-        end
-
-        job_executions = JobExecution.to_struct(job_executions)
-
-        JobExecutionState.job_executions_change(@datasource, job_executions)
-
-        job_executions
-      end
-
-      def JobExecution.to_struct(job_executions)
         if job_executions.empty?
           []
         else
-          job_executions.map do |je|
-            je_sym_hash = Hash[ je.map{|k,v| [k.to_sym, v] } ]
-            JobExecution.new(**je_sym_hash)
-          end
+          JobExecution.for_record(job_executions)
         end
       end
 
-    end
+      def update(where:, set:)
+        set_columns, set_values = DAO.compile_set_expr(set)
+        set_clause = set.map{|k,v| "#{k} = #{DAO.convert_value(v)}"}.join(', ')
+        
+        where_clause = DAO.compile_where_expr(where)
 
+        job_executions = @conn.query_rows(<<~SQL)
+          update job_executions je
+          set #{set_clause}
+          from
+              jobs j
+              join jobnets jn using(jobnet_id, "subsystem")
+          where
+              je.job_id = j.job_id 
+              and #{where_clause}
+          ;
+        SQL
+
+        job_executions = JobExecution.for_record(job_executions)
+        JobExecutionState.job_executions_change(@datasource, job_executions)
+
+        job_executions
+      end
+
+      def upsert(set:)
+        set_columns, set_values = DAO.compile_set_expr(set)
+        set_clause = set.map{|k,v| "#{k} = #{DAO.convert_value(v)}"}.join(', ')
+        
+        job_executions = @conn.query_rows(<<~SQL)
+          insert into job_executions (#{set_columns})
+              values (#{set_values})
+              on conflict (job_id)
+              do update set #{set_clause}
+          ;
+        SQL
+
+        job_executions = JobExecution.for_record(job_executions)
+        JobExecutionState.job_executions_change(@datasource, job_executions)
+
+        job_executions
+      end
+
+      def JobExecution.for_record(job_executions)
+        job_executions.map do |je|
+          je_sym_hash = Hash[ je.map{|k,v| [k.to_sym, v] } ]
+          Attributes.new(**je_sym_hash)
+        end
+      end
+    end
 
     class JobExecutionState
       def self.job_executions_change(datasource, job_executions)
@@ -111,24 +97,21 @@ module Bricolage
         end
       end
 
-
       def initialize(datasource)
         @datasource = datasource
+        @conn = @datasource.open
       end
 
       def create(job_execution_id:, status:, message:, job_id:)
         columns = 'job_execution_id, status, message, created_at, job_id'
-        values = "#{job_execution_id}, '#{status}', '#{message}', NOW(), #{job_id}"
-        @datasource.open do |conn|
-          conn.execute("INSERT INTO job_execution_states (#{columns}) VALUES (#{values});")
-        end
+        values = "#{job_execution_id}, '#{status}', '#{message}', now(), #{job_id}"
+        @conn.execute("insert into job_execution_states (#{columns}) values (#{values});")
       end
     end
 
-
     private
 
-    def self.parse_set(values_hash)
+    def self.compile_set_expr(values_hash)
       columns = values_hash.keys.map(&:to_s).join(', ')
       values = values_hash.values.map{|v| convert_value(v) }.join(', ')
       return columns, values
@@ -136,29 +119,33 @@ module Bricolage
 
     def self.convert_value(value)
       if value == :now
-        'NOW()'
+        'now()'
+      elsif value.nil?
+        "null"
       elsif value == true or value == false
-        "#{value}"
-      else
+        "#{value.to_s}"
+      elsif value.instance_of?(Integer) or value.instance_of?(Float)
+        "#{value.to_s}"
+      elsif value.instance_of?(String)
         "'#{value}'"
+      else
+        raise "invalid type for 'value' argument in JobExecution.convert_value: #{value}"
       end
     end
 
-    def self.parse_where(conds_hash)
-      conds_hash.map{|k,v| self.convet_cond(k,v) }.join(' AND ')
+    def self.compile_where_expr(conds_hash)
+      conds_hash.map{|k,v| self.convert_cond(k,v) }.join(' and ')
     end
 
-    def self.convet_cond(column, cond)
+    def self.convert_cond(column, cond)
       if cond.nil?
-        "#{column} IS NULL"
+        "#{column} is null"
       elsif cond.instance_of?(Array)
         in_clause = cond.map {|c| "'#{c}'"}.join(', ')
-        "#{column} IN (#{in_clause})"
+        "#{column} in (#{in_clause})"
       else
         "#{column} = '#{cond}'"
       end
     end
-
-
   end
 end
