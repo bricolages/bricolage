@@ -37,7 +37,7 @@ module Bricolage
       def update(where:, set:)
         set_columns, set_values = DAO.compile_set_expr(set)
         set_clause = set.map{|k,v| "#{k} = #{DAO.convert_value(v)}"}.join(', ')
-        
+
         where_clause = DAO.compile_where_expr(where)
 
         job_executions = @conn.query_rows(<<~SQL)
@@ -47,7 +47,7 @@ module Bricolage
               jobs j
               join jobnets jn using(jobnet_id, "subsystem")
           where
-              je.job_id = j.job_id 
+              je.job_id = j.job_id
               and #{where_clause}
           ;
         SQL
@@ -61,7 +61,7 @@ module Bricolage
       def upsert(set:)
         set_columns, set_values = DAO.compile_set_expr(set)
         set_clause = set.map{|k,v| "#{k} = #{DAO.convert_value(v)}"}.join(', ')
-        
+
         job_executions = @conn.query_rows(<<~SQL)
           insert into job_executions (#{set_columns})
               values (#{set_values})
@@ -126,10 +126,10 @@ module Bricolage
         "#{value.to_s}"
       elsif value.instance_of?(Integer) or value.instance_of?(Float)
         "#{value.to_s}"
-      elsif value.instance_of?(String)
+      elsif value.instance_of?(String) or value.instance_of?(Pathname)
         "'#{value}'"
       else
-        raise "invalid type for 'value' argument in JobExecution.convert_value: #{value}"
+        raise "invalid type for 'value' argument in JobExecution.convert_value: #{value} is #{value.class}"
       end
     end
 
@@ -140,11 +140,17 @@ module Bricolage
     def self.convert_cond(column, cond)
       if cond.nil?
         "#{column} is null"
-      elsif cond.instance_of?(Array)
-        in_clause = cond.map {|c| "'#{c}'"}.join(', ')
-        "#{column} in (#{in_clause})"
-      else
+      elsif cond.instance_of?(Array) # not support subquery
+        in_clause = cond.map{|c| self.convert_cond(column, c)}.join(' or ')
+        "(#{in_clause})"
+      elsif cond == true or cond == false
+        "#{column} is #{cond.to_s}"
+      elsif cond.instance_of?(Integer) or cond.instance_of?(Float)
+        "#{column} = #{cond}"
+      elsif cond.instance_of?(String) or cond.instance_of?(Pathname)
         "#{column} = '#{cond}'"
+      else
+        raise "invalid type for 'cond' argument in JobExecution.convert_cond: #{cond} is #{cond.class}"
       end
     end
   end
