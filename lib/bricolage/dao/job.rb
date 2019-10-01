@@ -26,17 +26,16 @@ module Bricolage
         SQL
 
         if job.empty?
-          []
+          nil
         else
           Attributes.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id'])
         end
       end
 
-      def create_if_not_exist(subsystem, job_name, jobnet_id)
+      def create(subsystem, job_name, jobnet_id)
         job = @conn.query_row(<<~SQL)
           insert into jobs ("subsystem", "job_name", jobnet_id)
               values ('#{subsystem}', '#{job_name}', #{jobnet_id})
-              on conflict ("subsystem", "job_name", jobnet_id) do nothing
               returning "job_id", "subsystem", "job_name", jobnet_id
           ;
         SQL
@@ -45,7 +44,7 @@ module Bricolage
       end
 
       def find_or_create(subsystem, job_name, jobnet_id)
-        find(subsystem, job_name, jobnet_id) || create_if_not_exist(subsystem, job_name, jobnet_id)
+        find(subsystem, job_name, jobnet_id) || create(subsystem, job_name, jobnet_id)
       end
     end
   end
