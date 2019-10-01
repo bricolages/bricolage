@@ -12,7 +12,7 @@ module Bricolage
         @conn = @datasource.open
       end
 
-      def find_by(**args)
+      def where(**args)
         where_clause = DAO.compile_where_expr(args)
 
         job_executions = @conn.query_rows(<<~SQL)

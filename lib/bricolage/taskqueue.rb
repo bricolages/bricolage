@@ -188,7 +188,7 @@ module Bricolage
     end
 
     def enqueue(task)
-      @jobexecution_dao.update(where: {"subsystem": task.subsystem, job_name: task.job_name},
+      @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
                                set:   {status: 'waiting', submitted_at: :now, started_at: nil, finished_at: nil})
       @queue.push task
     end
@@ -208,9 +208,9 @@ module Bricolage
     end
 
     def restore
-      job_executions = @jobexecution_dao.find_by(subsystem: @subsys,
-                                                 jobnet_name: @jobnet_name,
-                                                 status: ['waiting', 'running', 'failed'])
+      job_executions = @jobexecution_dao.where(subsystem: @subsys,
+                                               jobnet_name: @jobnet_name,
+                                               status: ['waiting', 'running', 'failed'])
 
       job_executions.each do |je|
         enqueue JobTask.for_job_execution(je)
@@ -225,7 +225,7 @@ module Bricolage
 
     def locked?
       count = @jobexecution_dao
-                .find_by(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
+                .where(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
                 .count
       count > 0
     end
@@ -241,7 +241,7 @@ module Bricolage
     end
 
     def locked_records
-      @jobexecution_dao.find_by(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
+      @jobexecution_dao.where(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
     end
 
     def unlock_help
