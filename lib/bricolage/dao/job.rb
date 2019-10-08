@@ -19,8 +19,8 @@ module Bricolage
           from
               jobs
           where
-              "subsystem" = '#{subsystem}'
-              and "job_name" = '#{job_name}'
+              "subsystem" = '#{escape(subsystem)}'
+              and "job_name" = '#{escape(job_name)}'
               and jobnet_id = #{jobnet_id}
           ;
         SQL
@@ -35,7 +35,7 @@ module Bricolage
       def create(subsystem, job_name, jobnet_id)
         job = @conn.query_row(<<~SQL)
           insert into jobs ("subsystem", "job_name", jobnet_id)
-              values ('#{subsystem}', '#{job_name}', #{jobnet_id})
+              values ('#{escape(subsystem)}', '#{escape(job_name)}', #{jobnet_id})
               returning "job_id", "subsystem", "job_name", jobnet_id
           ;
         SQL
@@ -45,6 +45,13 @@ module Bricolage
 
       def find_or_create(subsystem, job_name, jobnet_id)
         find(subsystem, job_name, jobnet_id) || create(subsystem, job_name, jobnet_id)
+      end
+
+      private
+
+      def escape(string)
+        return string unless string
+        string.to_s.gsub(/'/, "''").gsub(/\\/, '\\\\')
       end
     end
   end

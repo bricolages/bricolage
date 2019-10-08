@@ -109,7 +109,7 @@ module Bricolage
 
       def create(job_execution_id:, status:, message:, job_id:)
         columns = 'job_execution_id, status, message, created_at, job_id'
-        values = "#{job_execution_id}, '#{status}', '#{message}', now(), #{job_id}"
+        values = "#{job_execution_id}, '#{DAO.escape(status)}', '#{DAO.escape(message)}', now(), #{job_id}"
         @conn.execute("insert into job_execution_states (#{columns}) values (#{values});")
       end
     end
@@ -132,7 +132,7 @@ module Bricolage
       elsif value.instance_of?(Integer) or value.instance_of?(Float)
         "#{value.to_s}"
       elsif value.instance_of?(String) or value.instance_of?(Pathname)
-        "'#{value}'"
+        "'#{escape(value)}'"
       else
         raise "invalid type for 'value' argument in JobExecution.convert_value: #{value} is #{value.class}"
       end
@@ -153,10 +153,15 @@ module Bricolage
       elsif cond.instance_of?(Integer) or cond.instance_of?(Float)
         "#{column} = #{cond}"
       elsif cond.instance_of?(String) or cond.instance_of?(Pathname)
-        "#{column} = '#{cond}'"
+        "#{column} = '#{escape(cond)}'"
       else
         raise "invalid type for 'cond' argument in JobExecution.convert_cond: #{cond} is #{cond.class}"
       end
+    end
+
+    def self.escape(string)
+      return string unless string
+      string.to_s.gsub(/'/, "''").gsub(/\\/, '\\\\')
     end
   end
 end
