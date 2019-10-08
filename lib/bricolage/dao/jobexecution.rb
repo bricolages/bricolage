@@ -49,6 +49,7 @@ module Bricolage
           where
               je.job_id = j.job_id
               and #{where_clause}
+          returning *
           ;
         SQL
 

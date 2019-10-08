@@ -25,7 +25,7 @@ module Bricolage
           ;
         SQL
 
-        if job.empty?
+        if job.nil?
           nil
         else
           Attributes.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id'])

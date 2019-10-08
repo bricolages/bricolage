@@ -23,7 +23,7 @@ module Bricolage
           ;
         SQL
 
-        if jobnet.empty?
+        if jobnet.nil?
           nil
         else
           Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])

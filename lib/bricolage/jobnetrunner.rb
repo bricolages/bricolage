@@ -101,8 +101,10 @@ module Bricolage
 
     def get_queue(opts, jobnet)
       if opts.db_name
+        datasource = @ctx.get_data_source('psql', opts.db_name)
+        jobnet = jobnet.jobnets.first
         logger.info "DB connect: #{opts.db_name}"
-        DatabaseTaskQueue.restore_if_exist(@ctx, jobnet)
+        DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
       elsif path = get_queue_file_path(opts)
         logger.info "queue path: #{path}"
         FileTaskQueue.restore_if_exist(path)
@@ -151,6 +153,7 @@ module Bricolage
     end
 
     def run_queue(queue)
+      result = nil
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
       queue.consume_each do |task|
         result = execute_job(task.job, queue)
