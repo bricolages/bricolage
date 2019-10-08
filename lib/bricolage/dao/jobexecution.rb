@@ -12,6 +12,14 @@ module Bricolage
         @conn = @datasource.open
       end
 
+      def connection_close
+        @conn.close
+      end
+
+      def connection_reopen
+        @conn = @datasource.open
+      end
+
       def where(**args)
         where_clause = DAO.compile_where_expr(args)
 
@@ -39,8 +47,7 @@ module Bricolage
         set_clause = set.map{|k,v| "#{k} = #{DAO.convert_value(v)}"}.join(', ')
 
         where_clause = DAO.compile_where_expr(where)
-
-        job_executions = @conn.query_rows(<<~SQL)
+        job_executions = @conn.execute_update(<<~SQL)
           update job_executions je
           set #{set_clause}
           from
@@ -54,8 +61,7 @@ module Bricolage
         SQL
 
         job_executions = JobExecution.for_record(job_executions)
-        JobExecutionState.job_executions_change(@datasource, job_executions)
-
+        JobExecutionState.job_executions_change(@conn, job_executions)
         job_executions
       end
 
@@ -72,8 +78,7 @@ module Bricolage
         SQL
 
         job_executions = JobExecution.for_record(job_executions)
-        JobExecutionState.job_executions_change(@datasource, job_executions)
-
+        JobExecutionState.job_executions_change(@conn, job_executions)
         job_executions
       end
 
@@ -86,8 +91,8 @@ module Bricolage
     end
 
     class JobExecutionState
-      def self.job_executions_change(datasource, job_executions)
-        state = new(datasource)
+      def self.job_executions_change(connection, job_executions)
+        state = new(connection)
         job_executions.each do |je|
           state.create(
             job_execution_id: je.job_execution_id,
@@ -98,9 +103,8 @@ module Bricolage
         end
       end
 
-      def initialize(datasource)
-        @datasource = datasource
-        @conn = @datasource.open
+      def initialize(connection)
+        @conn = connection
       end
 
       def create(job_execution_id:, status:, message:, job_id:)

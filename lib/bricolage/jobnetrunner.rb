@@ -234,7 +234,8 @@ module Bricolage
         super.merge({
           'local-state-dir' => OptionValue.new('default value', '/tmp/bricolage'),
           'enable-queue' => OptionValue.new('default value', false),
-          'queue-path' => OptionValue.new('default value', nil)
+          'queue-path' => OptionValue.new('default value', nil),
+          'db-name' => OptionValue.new('default value', nil)
         })
       end
       private :opts_default
@@ -284,6 +285,9 @@ Options:
         }
         parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|
           @opts_cmdline['queue-path'] = OptionValue.new('--queue-path option', path)
+        }
+        parser.on('--db-name=DB_NAME', 'Enables job queue with this database.') {|db_name|
+          @opts_cmdline['db-name'] = OptionValue.new('--db-name option', db_name)
         }
         parser.on('-c', '--check-only', 'Checks job parameters and quit without executing.') {
           @check_only = true
@@ -355,6 +359,15 @@ Options:
         opt = @opts['queue-path']
         if opt.value
           Pathname(opt.value)
+        else
+          nil
+        end
+      end
+
+      def db_name
+        opt = @opts['db-name']
+        if opt.value
+          opt.value
         else
           nil
         end

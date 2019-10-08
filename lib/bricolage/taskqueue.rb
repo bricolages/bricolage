@@ -36,7 +36,7 @@ module Bricolage
       save
       while task = self.next
         task_result = yield task
-        break unless task_result.success?        
+        break unless task_result.success?
         dequeue
       end
     ensure
@@ -173,13 +173,16 @@ module Bricolage
       lock
       while task = self.next
         dequeuing
-        task_result = yield task
+
+        @jobexecution_dao.connection_close
+        task_result = yield task # running execute_job
+        @jobexecution_dao.connection_reopen
 
         if task_result.success?
           dequeued
         else
           @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
-                                   set:   {status: 'failed'})
+                                   set:   {status: 'failed', message: task_result.message})
           break
         end
       end
@@ -245,7 +248,7 @@ module Bricolage
     end
 
     def unlock_help
-      "remove the id records from job_executions: #{lock_records}"
+      "remove the id records from job_executions: #{locked_records.map(&:job_execution_id)}"
     end
 
     # for debug to test
