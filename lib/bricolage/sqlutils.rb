@@ -11,7 +11,7 @@ module Bricolage
     alias s sql_string_literal
 
     def escape_sql_string(s)
-      s.gsub(/'/, "''")
+      s.gsub(/'/, "''").gsub(/\\/, '\\\\')
     end
 
     def sql_timestamp_literal(time)
