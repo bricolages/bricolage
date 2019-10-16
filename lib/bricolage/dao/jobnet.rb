@@ -2,6 +2,8 @@ module Bricolage
   module DAO
     class JobNet
 
+      include SQLUtils
+
       Attributes = Struct.new(:id, :subsystem, :jobnet_name)
 
       def initialize(datasource)
@@ -18,8 +20,8 @@ module Bricolage
           from
               jobnets
           where
-              "subsystem" = '#{escape(subsystem)}'
-              and jobnet_name = '#{escape(jobnet_name)}'
+              "subsystem" = #{s(subsystem)}
+              and jobnet_name = #{s(jobnet_name)}
           ;
         SQL
 
@@ -33,7 +35,7 @@ module Bricolage
       def create(subsystem, jobnet_name)
         jobnet = @conn.query_row(<<~SQL)
           insert into jobnets ("subsystem", jobnet_name)
-              values ('#{escape(subsystem)}', '#{escape(jobnet_name)}')
+              values (#{s(subsystem)}, #{s(jobnet_name)})
               returning jobnet_id, "subsystem", jobnet_name
           ;
         SQL
@@ -43,13 +45,6 @@ module Bricolage
 
       def find_or_create(subsystem, jobnet_name)
         find(subsystem, jobnet_name) || create(subsystem, jobnet_name)
-      end
-
-      private
-
-      def escape(string)
-        return string unless string
-        string.to_s.gsub(/'/, "''").gsub(/\\/, '\\\\')
       end
     end
   end
