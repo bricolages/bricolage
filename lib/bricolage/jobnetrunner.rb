@@ -58,7 +58,7 @@ module Bricolage
         clear_queue(opts)
         exit EXIT_SUCCESS
       end
-      queue = get_queue(opts)
+      queue = get_queue(opts, jobnet)
       if queue.locked?
         raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
       end
@@ -92,13 +92,20 @@ module Bricolage
     end
 
     def clear_queue(opts)
-      if path = get_queue_file_path(opts)
+      if opts.db_name
+        opts ## TODO
+      elsif path = get_queue_file_path(opts)
         FileUtils.rm_f path
       end
     end
 
-    def get_queue(opts)
-      if path = get_queue_file_path(opts)
+    def get_queue(opts, jobnet)
+      if opts.db_name
+        datasource = @ctx.get_data_source('psql', opts.db_name)
+        jobnet = jobnet.jobnets.first
+        logger.info "DB connect: #{opts.db_name}"
+        DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
+      elsif path = get_queue_file_path(opts)
         logger.info "queue path: #{path}"
         FileTaskQueue.restore_if_exist(path)
       else
@@ -127,7 +134,7 @@ module Bricolage
     def enqueue_jobs(jobnet, queue)
       seq = 1
       jobnet.sequential_jobs.each do |ref|
-        queue.enq JobTask.new(ref)
+        queue.enqueue JobTask.new(ref)
         seq += 1
       end
       queue.save
@@ -146,19 +153,20 @@ module Bricolage
     end
 
     def run_queue(queue)
+      result = nil
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
       queue.consume_each do |task|
         result = execute_job(task.job, queue)
-        unless result.success?
-          logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
-          logger.error "[job #{task.job}] #{result.message}"
-          @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(false, queue))
-          exit result.status
-        end
       end
-      @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(true, queue))
+      @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(result.success?, queue))
       logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
-      logger.info "status all green"
+
+      if result.success?
+        logger.info "status all green"
+      else
+        logger.error "[job #{task.job}] #{result.message}"
+        exit result.status
+      end
     end
 
     def execute_job(ref, queue)
@@ -226,7 +234,8 @@ module Bricolage
         super.merge({
           'local-state-dir' => OptionValue.new('default value', '/tmp/bricolage'),
           'enable-queue' => OptionValue.new('default value', false),
-          'queue-path' => OptionValue.new('default value', nil)
+          'queue-path' => OptionValue.new('default value', nil),
+          'db-name' => OptionValue.new('default value', nil)
         })
       end
       private :opts_default
@@ -276,6 +285,9 @@ Options:
         }
         parser.on('--queue-path=PATH', 'Enables job queue with this path.') {|path|
           @opts_cmdline['queue-path'] = OptionValue.new('--queue-path option', path)
+        }
+        parser.on('--db-name=DB_NAME', 'Enables job queue with this database.') {|db_name|
+          @opts_cmdline['db-name'] = OptionValue.new('--db-name option', db_name)
         }
         parser.on('-c', '--check-only', 'Checks job parameters and quit without executing.') {
           @check_only = true
@@ -347,6 +359,15 @@ Options:
         opt = @opts['queue-path']
         if opt.value
           Pathname(opt.value)
+        else
+          nil
+        end
+      end
+
+      def db_name
+        opt = @opts['db-name']
+        if opt.value
+          opt.value
         else
           nil
         end

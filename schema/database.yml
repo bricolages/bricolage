@@ -1,0 +1,8 @@
+adapter: postgresql
+host: <%= ENV['PGHOST'] || "localhost" %>
+port: 5432
+database: <%= ENV['PGDATABASE'] || "bricolage" %>
+username: <%= ENV['PGUSER'] || "bricolage" %>
+password: <%= ENV['PGPASSWORD'] || "bricolage" %>
+encoding: unicode
+pool: 1

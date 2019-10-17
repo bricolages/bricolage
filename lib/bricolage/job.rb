@@ -9,7 +9,7 @@ require 'bricolage/exception'
 require 'fileutils'
 
 module Bricolage
-  
+
   class Job
     # For JobNetRunner
     def Job.load_ref(ref, jobnet_context)
