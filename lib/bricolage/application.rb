@@ -39,7 +39,7 @@ module Bricolage
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse!(ARGV)
 
-      @ctx = Context.for_application(opts.home, opts.job_file, environment: opts.environment, global_variables: opts.global_variables)
+      @ctx = Context.for_application(opts.home, opts.job_file, environment: opts.environment, option_variables: opts.option_variables)
       opts.merge_saved_options(@ctx.load_system_options)
 
       if opts.dump_options?
@@ -294,7 +294,7 @@ module Bricolage
       @job_file = nil
       @environment = nil
       @home = nil
-      @global_variables = Variables.new
+      @option_variables = Variables.new
       @dry_run = false
       @explain = false
       @list_global_variables = false
@@ -351,9 +351,9 @@ Global Options:
       parser.on('-r', '--require=FEATURE', 'Requires ruby library.') {|feature|
         require feature
       }
-      parser.on('-v', '--variable=NAME=VALUE', 'Set global variable (is different from job-level -v !!).') {|name_value|
+      parser.on('-v', '--variable=NAME=VALUE', 'Set option variable (is different from job-level -v !!).') {|name_value|
         name, value = name_value.split('=', 2)
-        @global_variables[name] = value
+        @option_variables[name] = value
       }
       parser.on('--dump-options', 'Shows option parsing result and quit.') {
         @dump_options = true
@@ -401,7 +401,7 @@ Global Options:
       @dump_options
     end
 
-    attr_reader :global_variables
+    attr_reader :option_variables
 
     def list_global_variables?
       @list_global_variables

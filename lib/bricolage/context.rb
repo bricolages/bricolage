@@ -19,7 +19,7 @@ module Bricolage
       FileSystem.home_path(opt_path)
     end
 
-    def Context.for_application(home_path = nil, job_path_0 = nil, job_path: nil, environment: nil, global_variables: nil, logger: nil)
+    def Context.for_application(home_path = nil, job_path_0 = nil, job_path: nil, environment: nil, option_variables: nil, logger: nil)
       env = environment(environment)
       if (job_path ||= job_path_0)
         fs = FileSystem.for_job_path(job_path, env)
@@ -29,21 +29,21 @@ module Bricolage
       else
         fs = FileSystem.for_options(home_path, env)
       end
-      load(fs, env, global_variables: global_variables, logger: logger)
+      load(fs, env, option_variables: option_variables, logger: logger)
     end
 
-    def Context.load(fs, env, global_variables: nil, data_sources: nil, logger: nil)
-      new(fs, env, global_variables: global_variables, logger: logger).tap {|ctx|
+    def Context.load(fs, env, option_variables: nil, data_sources: nil, logger: nil)
+      new(fs, env, option_variables: option_variables, logger: logger).tap {|ctx|
         ctx.load_configurations
       }
     end
     private_class_method :load
 
-    def initialize(fs, env, global_variables: nil, data_sources: nil, logger: nil)
+    def initialize(fs, env, option_variables: nil, data_sources: nil, logger: nil)
       @logger = logger || Logger.default
       @filesystem = fs
       @environment = env
-      @opt_global_variables = global_variables || Variables.new
+      @option_variables = option_variables || Variables.new
       @data_sources = data_sources
     end
 
@@ -56,6 +56,7 @@ module Bricolage
 
     attr_reader :environment
     attr_reader :logger
+    attr_reader :option_variables
 
     def get_data_source(type, name)
       @data_sources.get(type, name)
@@ -63,7 +64,7 @@ module Bricolage
 
     def subsystem(id)
       self.class.new(@filesystem.subsystem(id), @environment,
-        global_variables: @opt_global_variables,
+        option_variables: @option_variables,
         data_sources: @data_sources,
         logger: @logger)
     end
@@ -102,7 +103,6 @@ module Bricolage
       Variables.union(
         builtin_variables,
         load_global_variables,
-        @opt_global_variables
       )
     end
 

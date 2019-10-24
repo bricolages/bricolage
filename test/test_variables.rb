@@ -18,18 +18,18 @@ module Bricolage
       opt_gvars = Variables.new
       opt_gvars.add Variable.new('var_global_opt', 'loc_global_opt')
       fs = DummyFS.new('/home/path')
-      ctx = DummyContextForGvarTest.new(fs, 'development', global_variables: opt_gvars)
+      ctx = DummyContextForGvarTest.new(fs, 'development', option_variables: opt_gvars)
       ctx.variable_yml_vars = Variables.define {|vars|
         vars.add Variable.new('var_variable_yml', 'loc_variable_yml')
         vars.add Variable.new('var_global_opt', 'loc_variable_yml')
       }
       result = ctx.global_variables
-
       assert_equal 'loc_variable_yml', result['var_variable_yml']
-      assert_equal 'loc_global_opt', result['var_global_opt']
+      assert_equal 'loc_variable_yml', result['var_global_opt']
+
     end
 
-    DummyContext = Struct.new(:global_variables)
+    DummyContext = Struct.new(:global_variables, :option_variables)
     class DummyContext
       def job_dir
         '/job/dir'

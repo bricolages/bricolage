@@ -39,7 +39,7 @@ module Bricolage
       @hooks.run_before_option_parsing_hooks(opts)
       opts.parse!(ARGV)
 
-      @ctx = Context.for_application(job_path: opts.jobnet_files.first, environment: opts.environment, global_variables: opts.global_variables)
+      @ctx = Context.for_application(job_path: opts.jobnet_files.first, environment: opts.environment, option_variables: opts.option_variables)
       opts.merge_saved_options(@ctx.load_system_options)
 
       jobnet = RootJobNet.load_auto(@ctx, opts.jobnet_files)
@@ -219,7 +219,7 @@ module Bricolage
       def initialize(app)
         @app = app
         @environment = nil
-        @global_variables = Variables.new
+        @option_variables = Variables.new
         @jobnet_files = nil
 
         @dump_options = false
@@ -295,9 +295,9 @@ Options:
         parser.on('-l', '--list-jobs', 'Lists target jobs without executing.') {
           @list_jobs = true
         }
-        parser.on('-v', '--variable=NAME=VALUE', 'Defines global variable.') {|name_value|
+        parser.on('-v', '--variable=NAME=VALUE', 'Defines option variable.') {|name_value|
           name, value = name_value.split('=', 2)
-          @global_variables[name] = value
+          @option_variables[name] = value
         }
         parser.on('--dump-options', 'Shows option parsing result and quit.') {
           @dump_options = true
@@ -329,7 +329,7 @@ Options:
 
       attr_reader :jobnet_files
 
-      attr_reader :global_variables
+      attr_reader :option_variables
 
       def dump_options?
         @dump_options

@@ -41,6 +41,7 @@ module Bricolage
       @job_class = job_class
       @context = context
       @global_variables = nil
+      @option_variables = @context.option_variables
       @param_decls = @job_class.get_parameters
       @param_vals = nil      # Parameters::IntermediateValues by *.job
       @param_vals_opt = nil  # Parameters::IntermediateValues by options
@@ -87,6 +88,7 @@ module Bricolage
 
       job_file_rest_vars = @param_vals ? @param_vals.variables : Variables.new
       job_v_opt_vars = @param_vals_opt ? @param_vals_opt.variables : Variables.new
+      option_vars = @option_variables ? @option_variables : Variables.new
 
       # We use different variable set for paramter expansion and
       # SQL variable expansion.  Parameter expansion uses global
@@ -107,6 +109,7 @@ module Bricolage
         @global_variables,
         @params.variables,   # Like $dest_table
         job_file_rest_vars,
+        option_vars,
         job_v_opt_vars
         #          v High precedence
       )
