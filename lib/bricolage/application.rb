@@ -351,7 +351,7 @@ Global Options:
       parser.on('-r', '--require=FEATURE', 'Requires ruby library.') {|feature|
         require feature
       }
-      parser.on('-v', '--variable=NAME=VALUE', 'Set option variable (is different from job-level -v !!).') {|name_value|
+      parser.on('-v', '--variable=NAME=VALUE', 'Set option variable.') {|name_value|
         name, value = name_value.split('=', 2)
         @option_variables[name] = value
       }
