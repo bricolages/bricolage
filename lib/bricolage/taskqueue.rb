@@ -192,7 +192,7 @@ module Bricolage
 
     def enqueue(task)
       @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
-                               set:   {status: 'waiting', submitted_at: :now, started_at: nil, finished_at: nil})
+                               set:   {status: 'waiting', message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
       @queue.push task
     end
 
@@ -222,7 +222,7 @@ module Bricolage
 
     def enqueue_job_executions
       @jobs.each do |job|
-        @jobexecution_dao.upsert(set: {status: 'waiting', job_id: job.id, lock: false})
+        @jobexecution_dao.upsert(set: {status: 'waiting', job_id: job.id, message: nil, lock: false})
       end
     end
 
