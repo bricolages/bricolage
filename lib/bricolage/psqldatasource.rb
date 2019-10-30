@@ -15,6 +15,8 @@ module Bricolage
 
     include CommandUtils
 
+    DEFAULT_RETRY_LIMIT = 3
+
     def initialize(
         host: 'localhost',
         port: 5439,
@@ -109,7 +111,23 @@ module Bricolage
     end
 
     def open(&block)
-      PostgresConnection.open_data_source(self, &block)
+      retries = (ENV['BRICOLAGE_OPEN_RETRY_LIMIT'] || DEFAULT_RETRY_LIMIT).to_i
+      begin
+        conn = PostgresConnection.open_data_source(self)
+        conn.execute_query('select 1'){}
+      rescue PG::ConnectionBad, PG::UnableToSend => ex
+        retries -= 1
+        if retries >= 0
+          logger.warn "Retry PG connection for execute query: #{ex.message}"
+          sleep 1
+          retry
+        end
+      end
+      if block_given?
+        yield conn
+      else
+        return conn
+      end
     end
 
     def query_batch(query, batch_size = 5000, &block)
