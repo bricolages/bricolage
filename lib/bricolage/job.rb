@@ -106,12 +106,12 @@ module Bricolage
       # Then, expand SQL variables and check with declarations.
       vars = Variables.union(
         #          ^ Low precedence
-        declarations.default_variables, # defined by jobclass
+        declarations.default_variables, # default value written in *.sql
         @global_variables,   # from yaml file
         @params.variables,   # Like $dest_table in job file
         job_file_rest_vars,  # custom variable at header of job file
-        cmd_v_opt_vars,      # -v option for jobnet command
-        job_v_opt_vars       # -v option for job command
+        cmd_v_opt_vars,      # -v option for bricolage/bricolage-jobnet command
+        job_v_opt_vars       # -v option for bricolage command using jobclass
         #          v High precedence
       )
       @variables = vars.resolve

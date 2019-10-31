@@ -23,7 +23,7 @@ module Bricolage
       ctx = DummyContextForGvarTest.new(fs, 'development')
       ctx.builtin_variables = Variables.define {|vars|
         # global variables from builtin
-        vars.add Variable.new('builltin_variable', 'loc_builtin_value')
+        vars.add Variable.new('builtin_variable', 'loc_builtin_value')
         vars.add Variable.new('ow_yml_variable', 'loc_builtin_value')
       }
       ctx.variable_yml_vars = Variables.define {|vars|
