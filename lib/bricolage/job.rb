@@ -41,6 +41,7 @@ module Bricolage
       @job_class = job_class
       @context = context
       @global_variables = nil
+      @option_variables = @context.option_variables
       @param_decls = @job_class.get_parameters
       @param_vals = nil      # Parameters::IntermediateValues by *.job
       @param_vals_opt = nil  # Parameters::IntermediateValues by options
@@ -87,6 +88,7 @@ module Bricolage
 
       job_file_rest_vars = @param_vals ? @param_vals.variables : Variables.new
       job_v_opt_vars = @param_vals_opt ? @param_vals_opt.variables : Variables.new
+      cmd_v_opt_vars = @option_variables ? @option_variables : Variables.new
 
       # We use different variable set for paramter expansion and
       # SQL variable expansion.  Parameter expansion uses global
@@ -94,6 +96,7 @@ module Bricolage
       base_vars = Variables.union(
         #          ^ Low precedence
         @global_variables,
+        cmd_v_opt_vars,
         job_v_opt_vars
         #          v High precedence
       )
@@ -103,11 +106,12 @@ module Bricolage
       # Then, expand SQL variables and check with declarations.
       vars = Variables.union(
         #          ^ Low precedence
-        declarations.default_variables,
-        @global_variables,
-        @params.variables,   # Like $dest_table
-        job_file_rest_vars,
-        job_v_opt_vars
+        declarations.default_variables, # default value written in *.sql
+        @global_variables,   # from yaml file
+        @params.variables,   # Like $dest_table in job file
+        job_file_rest_vars,  # custom variable at header of job file
+        cmd_v_opt_vars,      # -v option for bricolage/bricolage-jobnet command
+        job_v_opt_vars       # -v option for bricolage command using jobclass
         #          v High precedence
       )
       @variables = vars.resolve
