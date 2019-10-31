@@ -32,7 +32,7 @@ module Bricolage
       }
       result = ctx.global_variables
 
-      assert_equal 'loc_builtin_value', result['builltin_variable']
+      assert_equal 'loc_builtin_value', result['builtin_variable']
       assert_equal 'loc_yml_value', result['ow_yml_variable'] # overwritten
     end
 
