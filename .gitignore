@@ -20,3 +20,4 @@ doc/
 /dev
 /test/home/config
 Gemfile.lock
+!schema/Gemifle.lock
