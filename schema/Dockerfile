@@ -10,5 +10,4 @@ WORKDIR /app
 COPY . /app
 RUN cp -a /tmp/vendor /app/
 
-CMD ["bundle", "exec", "ridgepole", "-f", "Schemafile", "-c", "database.yml", "--merge", "--dry-run"]d
-
+CMD ["bundle", "exec", "ridgepole", "-f", "Schemafile", "-c", "database.yml", "--merge", "--dry-run"]
