@@ -19,4 +19,4 @@ doc/
 
 /dev
 /test/home/config
-Gemfile.lock
+/Gemfile.lock
