@@ -18,7 +18,7 @@ module Bricolage
 
       def initialize(datasource)
         @datasource = datasource
-        @conn = @datasource.open
+        @conn = @datasource.open_shared_connection
       end
 
       def connection_close
@@ -26,7 +26,7 @@ module Bricolage
       end
 
       def connection_reopen
-        @conn = @datasource.open
+        @conn = @datasource.open_shared_connection
       end
 
       def where(**args)
@@ -163,9 +163,6 @@ module Bricolage
         columns = 'job_execution_id, status, message, created_at, job_id'
         values = "#{job_execution_id}, #{s(status)}, #{s(message)}, now(), #{job_id}"
         @conn.execute("insert into job_execution_states (#{columns}) values (#{values});")
-      rescue
-        require 'pry'
-        binding.pry
       end
     end
   end

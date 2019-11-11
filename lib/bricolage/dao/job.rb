@@ -8,7 +8,7 @@ module Bricolage
 
       def initialize(datasource)
         @datasource = datasource
-        @conn = @datasource.open
+        @conn = @datasource.open_shared_connection
       end
 
       def find(subsystem, job_name, jobnet_id)

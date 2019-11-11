@@ -130,6 +130,16 @@ module Bricolage
       end
     end
 
+    def open_shared_connection(&block)
+      @conn ||= open
+
+      if block_given?
+        yield @conn
+      else
+        return @conn
+      end
+    end
+
     def query_batch(query, batch_size = 5000, &block)
       open {|conn| conn.query_batch(query, batch_size, &block) }
     end
