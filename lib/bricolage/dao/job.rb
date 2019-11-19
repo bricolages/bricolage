@@ -8,24 +8,25 @@ module Bricolage
 
       def initialize(datasource)
         @datasource = datasource
-        @conn = @datasource.open_shared_connection
       end
 
       def find(subsystem, job_name, jobnet_id)
-        job = @conn.query_row(<<~SQL)
-          select
-              "job_id"
-              , "subsystem"
-              , "job_name"
-              , jobnet_id
-          from
-              jobs
-          where
-              "subsystem" = #{s(subsystem)}
-              and "job_name" = #{s(job_name)}
-              and jobnet_id = #{jobnet_id}
-          ;
-        SQL
+        job = @datasource.open_shared_connection do |conn|
+          conn.query_row(<<~SQL)
+            select
+                "job_id"
+                , "subsystem"
+                , "job_name"
+                , jobnet_id
+            from
+                jobs
+            where
+                "subsystem" = #{s(subsystem)}
+                and "job_name" = #{s(job_name)}
+                and jobnet_id = #{jobnet_id}
+            ;
+          SQL
+        end
 
         if job.nil?
           nil
@@ -35,12 +36,14 @@ module Bricolage
       end
 
       def create(subsystem, job_name, jobnet_id)
-        job = @conn.query_row(<<~SQL)
-          insert into jobs ("subsystem", "job_name", jobnet_id)
-              values (#{s(subsystem)}, #{s(job_name)}, #{jobnet_id})
-              returning "job_id", "subsystem", "job_name", jobnet_id
-          ;
-        SQL
+        job = @datasource.open_shared_connection do |conn|
+          conn.query_row(<<~SQL)
+            insert into jobs ("subsystem", "job_name", jobnet_id)
+                values (#{s(subsystem)}, #{s(job_name)}, #{jobnet_id})
+                returning "job_id", "subsystem", "job_name", jobnet_id
+            ;
+          SQL
+        end
 
         Attributes.new(job['job_id'], job['subsystem'], job['job_name'], job['jobnet_id'])
       end
