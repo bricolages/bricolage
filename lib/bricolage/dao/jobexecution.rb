@@ -38,7 +38,7 @@ module Bricolage
           from
               job_executions je
               join jobs j using(job_id)
-              join jobnets jn using(jobnet_id, "subsystem")
+              join jobnets jn using(jobnet_id)
           where
               #{where_clause}
           ;
@@ -61,7 +61,7 @@ module Bricolage
           set #{set_clause}
           from
               jobs j
-              join jobnets jn using(jobnet_id, "subsystem")
+              join jobnets jn using(jobnet_id)
           where
               je.job_id = j.job_id
               and #{where_clause}
