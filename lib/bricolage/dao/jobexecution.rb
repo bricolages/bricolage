@@ -150,6 +150,7 @@ module Bricolage
             job_execution_id: je.job_execution_id,
             status: je.status || '',
             message: je.message || '',
+            lock: locked?(je),
             job_id: je.job_id
           )
         end
@@ -159,13 +160,16 @@ module Bricolage
         @conn = connection
       end
 
-      def create(job_execution_id:, status:, message:, job_id:)
-        columns = 'job_execution_id, status, message, created_at, job_id'
-        values = "#{job_execution_id}, #{s(status)}, #{s(message)}, now(), #{job_id}"
+      def create(job_execution_id:, status:, message:, lock:, job_id:)
+        columns = 'job_execution_id, status, message, lock, created_at, job_id'
+        values = "#{job_execution_id}, #{s(status)}, #{s(message)}, #{lock}, now(), #{job_id}"
         @conn.execute("insert into job_execution_states (#{columns}) values (#{values});")
-      rescue
-        require 'pry'
-        binding.pry
+      end
+
+      private
+
+      def locked?(job_execution)
+        job_execution.lock == 't'
       end
     end
   end

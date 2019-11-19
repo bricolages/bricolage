@@ -26,6 +26,7 @@ end
 create_table "job_execution_states", primary_key: "job_execution_state_id", force: :cascade do |t|
   t.integer  "job_execution_id", null: false
   t.string   "status",           null: false
+  t.boolean  "lock",             null: false
   t.string   "message"
   t.datetime "created_at", default: -> { "now()" }, null: false
   t.integer  "job_id",           null: false
