@@ -20,10 +20,6 @@ module Bricolage
         @datasource = datasource
       end
 
-      def connection_close
-        @datasource.close_shared_connection
-      end
-
       def where(**args)
         where_clause = compile_where_expr(args)
 

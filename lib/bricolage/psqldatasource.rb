@@ -131,15 +131,16 @@ module Bricolage
       end
     end
 
-    def open_shared_connection(&block)
+    def open_shared_connection
       raise ParameterError, 'open_shared_connection require block' unless block_given?
-      conn = @connection_pool.empty? ? open : @connection_pool.pop
+      conn = @connection_pool.empty? ? open : @connection_pool.shift
+      conn.execute_query('select 1'){}
       yield conn
     ensure
       @connection_pool.push(conn)
     end
 
-    def close_shared_connection
+    def clear_connection_pool
       @connection_pool.map(&:close)
       @connection_pool = []
     end
