@@ -133,8 +133,18 @@ module Bricolage
 
     def open_shared_connection
       raise ParameterError, 'open_shared_connection require block' unless block_given?
-      conn = @connection_pool.empty? ? open : @connection_pool.shift
-      conn.execute_query('select 1'){}
+      conn = nil
+      if @connection_pool.empty?
+        conn = open
+      else
+        begin
+          conn = @connection_pool.shift
+          conn.execute_query('select 1'){}
+        rescue
+          conn = open
+        end
+      end
+
       yield conn
     ensure
       @connection_pool.push(conn)
