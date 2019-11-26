@@ -141,6 +141,7 @@ module Bricolage
           conn = @connection_pool.shift
           conn.execute_query('select 1'){}
         rescue
+          conn.close
           conn = open
         end
       end
