@@ -38,6 +38,7 @@ module Bricolage
       @psql = psql
       @sql_log_level = Logger.intern_severity(sql_log_level)
       @tmpdir = tmpdir
+      @connection_pool = []
       raise ParameterError, "missing psql host" unless @host
       raise ParameterError, "missing psql port" unless @port
       raise ParameterError, "missing psql database" unless @database
@@ -128,6 +129,31 @@ module Bricolage
       else
         return conn
       end
+    end
+
+    def open_shared_connection
+      raise ParameterError, 'open_shared_connection require block' unless block_given?
+      conn = nil
+      if @connection_pool.empty?
+        conn = open
+      else
+        begin
+          conn = @connection_pool.shift
+          conn.execute_query('select 1'){}
+        rescue
+          conn.close
+          conn = open
+        end
+      end
+
+      yield conn
+    ensure
+      @connection_pool.push(conn)
+    end
+
+    def clear_connection_pool
+      @connection_pool.map(&:close)
+      @connection_pool = []
     end
 
     def query_batch(query, batch_size = 5000, &block)

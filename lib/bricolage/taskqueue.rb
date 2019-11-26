@@ -174,9 +174,8 @@ module Bricolage
       while task = self.next
         dequeuing
 
-        @jobexecution_dao.connection_close
+        @ds.clear_connection_pool
         task_result = yield task # running execute_job
-        @jobexecution_dao.connection_reopen
 
         if task_result.success?
           dequeued

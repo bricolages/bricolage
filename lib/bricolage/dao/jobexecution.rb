@@ -18,31 +18,24 @@ module Bricolage
 
       def initialize(datasource)
         @datasource = datasource
-        @conn = @datasource.open
-      end
-
-      def connection_close
-        @conn.close
-      end
-
-      def connection_reopen
-        @conn = @datasource.open
       end
 
       def where(**args)
         where_clause = compile_where_expr(args)
 
-        job_executions = @conn.query_rows(<<~SQL)
-          select
-              *
-          from
-              job_executions je
-              join jobs j using(job_id)
-              join jobnets jn using(jobnet_id, "subsystem")
-          where
-              #{where_clause}
-          ;
-        SQL
+        job_executions = @datasource.open_shared_connection do |conn|
+          conn.query_rows(<<~SQL)
+            select
+                *
+            from
+                job_executions je
+                join jobs j using(job_id)
+                join jobnets jn using(jobnet_id, "subsystem")
+            where
+                #{where_clause}
+            ;
+          SQL
+        end
 
         if job_executions.empty?
           []
@@ -56,21 +49,23 @@ module Bricolage
         set_clause = set.map{|k,v| "#{k} = #{convert_value(v)}"}.join(', ')
 
         where_clause = compile_where_expr(where)
-        job_executions = @conn.execute_update(<<~SQL)
-          update job_executions je
-          set #{set_clause}
-          from
-              jobs j
-              join jobnets jn using(jobnet_id, "subsystem")
-          where
-              je.job_id = j.job_id
-              and #{where_clause}
-          returning *
-          ;
-        SQL
+        job_executions = @datasource.open_shared_connection do |conn|
+          conn.execute_update(<<~SQL)
+            update job_executions je
+            set #{set_clause}
+            from
+                jobs j
+                join jobnets jn using(jobnet_id, "subsystem")
+            where
+                je.job_id = j.job_id
+                and #{where_clause}
+            returning *
+            ;
+          SQL
+        end
 
         job_executions = JobExecution.for_record(job_executions)
-        JobExecutionState.job_executions_change(@conn, job_executions)
+        JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
       end
 
@@ -78,16 +73,18 @@ module Bricolage
         set_columns, set_values = compile_set_expr(set)
         set_clause = set.map{|k,v| "#{k} = #{convert_value(v)}"}.join(', ')
 
-        job_executions = @conn.query_rows(<<~SQL)
-          insert into job_executions (#{set_columns})
-              values (#{set_values})
-              on conflict (job_id)
-              do update set #{set_clause}
-          ;
-        SQL
+        job_executions = @datasource.open_shared_connection do |conn|
+          conn.query_rows(<<~SQL)
+            insert into job_executions (#{set_columns})
+                values (#{set_values})
+                on conflict (job_id)
+                do update set #{set_clause}
+            ;
+          SQL
+        end
 
         job_executions = JobExecution.for_record(job_executions)
-        JobExecutionState.job_executions_change(@conn, job_executions)
+        JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
       end
 
@@ -135,16 +132,14 @@ module Bricolage
           raise "invalid type for 'cond' argument in JobExecution#convert_cond: #{cond} is #{cond.class}"
         end
       end
-
-
     end
 
     class JobExecutionState
 
       include SQLUtils
 
-      def self.job_executions_change(connection, job_executions)
-        state = new(connection)
+      def self.job_executions_change(datasource, job_executions)
+        state = new(datasource)
         job_executions.each do |je|
           state.create(
             job_execution_id: je.job_execution_id,
@@ -155,17 +150,16 @@ module Bricolage
         end
       end
 
-      def initialize(connection)
-        @conn = connection
+      def initialize(datasource)
+        @datasource = datasource
       end
 
       def create(job_execution_id:, status:, message:, job_id:)
         columns = 'job_execution_id, status, message, created_at, job_id'
         values = "#{job_execution_id}, #{s(status)}, #{s(message)}, now(), #{job_id}"
-        @conn.execute("insert into job_execution_states (#{columns}) values (#{values});")
-      rescue
-        require 'pry'
-        binding.pry
+        @datasource.open_shared_connection do |conn|
+          conn.execute("insert into job_execution_states (#{columns}) values (#{values});")
+        end
       end
     end
   end
