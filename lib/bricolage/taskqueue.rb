@@ -190,28 +190,28 @@ module Bricolage
     end
 
     def enqueue(task)
-      @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
+      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
                                set:   {status: 'waiting', message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
       @queue.push task
     end
 
     def dequeuing
       task = @queue.first
-      @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
+      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
                                set:   {status: 'running', started_at: :now})
       task
     end
 
     def dequeued
       task = @queue.shift
-      @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
+      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
                                set:   {status: 'succeeded', finished_at: :now})
       task
     end
 
     def restore
-      job_executions = @jobexecution_dao.where(subsystem: @subsys,
-                                               jobnet_name: @jobnet_name,
+      job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
+                                               jobnet_name: @jobnet.jobnet_name,
                                                status: ['waiting', 'running', 'failed'])
 
       job_executions.each do |je|
