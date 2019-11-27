@@ -4,7 +4,15 @@ module Bricolage
 
       include SQLUtils
 
-      Attributes = Struct.new(:id, :subsystem, :jobnet_name)
+      Attributes = Struct.new(:id, :subsystem, :jobnet_name, :executor_id)
+
+      def JobNet.for_record(jobnet)
+        Attributes.new(*jobnet.values)
+      end
+
+      def JobNet.for_records(jobnets)
+        jobnets.map { |jobnet| JobNet.for_record(jobnet) }
+      end
 
       def initialize(datasource)
         @datasource = datasource
@@ -29,7 +37,7 @@ module Bricolage
         if jobnet.nil?
           nil
         else
-          Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])
+          JobNet.for_record(jobnet)
         end
       end
 
@@ -43,7 +51,7 @@ module Bricolage
           SQL
         end
 
-        Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])
+        JobNet.for_record(jobnet)
       end
 
       def find_or_create(subsystem, jobnet_name)

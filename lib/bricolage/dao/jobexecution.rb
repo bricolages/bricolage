@@ -4,10 +4,10 @@ module Bricolage
 
       include  SQLUtils
 
-      Attributes = Struct.new(:jobnet_id, :subsystem, :job_id, :job_execution_id,
-                                :status, :message, :submitted_at, :lock,
-                                :started_at, :finished_at, :source, :job_name, :jobnet_name,
-                                keyword_init: true)
+      Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :status, :message,
+                              :submitted_at, :lock,:started_at, :finished_at, :source,
+                              :job_name, :jobnet_name, :executor_id, :subsystem,
+                              keyword_init: true)
 
       def JobExecution.for_record(job_executions)
         job_executions.map do |je|
