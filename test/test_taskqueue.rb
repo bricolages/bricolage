@@ -103,10 +103,10 @@ module Bricolage
       queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
       assert_false  queue.locked?
 
-      queue.lock_job(jobtask1)
+      queue.lock_job(job1.id)
       assert_true  queue.locked?
 
-      queue.unlock_job(jobtask1)
+      queue.unlock_job(job1.id)
       assert_false queue.locked?
     end
   end
