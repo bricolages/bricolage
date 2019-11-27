@@ -175,9 +175,13 @@ module Bricolage
       while task = self.next
         lock_job(task)
 
+        job_execution = dequeuing
+
         dequeuing
         @ds.clear_connection_pool
         task_result = yield task # running execute_job
+
+        unlock_job(job_execution.first.job_id)
 
         if task_result.success?
           dequeued
@@ -249,8 +253,8 @@ module Bricolage
       raise DoubleLockError, "Already locked id:#{@jobnet.id} jobnet" if lock_results.empty?
     end
 
-    def unlock_job(task)
-      @job_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
+    def unlock_job(job_id)
+      @job_dao.update(where: {job_id: job_id},
                       set:   {executor_id: nil})
     end
 
