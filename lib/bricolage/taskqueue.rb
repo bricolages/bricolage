@@ -141,28 +141,28 @@ module Bricolage
   end
 
   class DatabaseTaskQueue < TaskQueue
-    def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref)
-      subsys, jobnet_name = jobnet_ref.name.delete('*').split('/')
+    def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, executor_id)
+      jobnet_subsys, jobnet_name = jobnet_ref.name.delete('*').split('/')
       job_refs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
-      jobnet = Bricolage::DAO::JobNet.new(datasource).find_or_create(subsys, jobnet_name)
-      job_dao = Bricolage::DAO::Job.new(datasource)
-      jobs = job_refs.map {|jobref| job_dao.find_or_create(subsys, jobref.name, jobnet.id) }
+      q = new(datasource, jobnet_subsys, jobnet_name, job_refs, executor_id)
 
-      q = new(datasource, subsys, jobnet_name, jobs)
+      return q if q.locked?
 
       q.restore
       q.enqueue_job_executions unless q.queued?
       q
     end
 
-    def initialize(datasource, subsys, jobnet_name, jobs)
+    def initialize(datasource, subsys, jobnet_name, job_refs, executor_id)
       super()
       @ds = datasource
-      @subsys = subsys
-      @jobnet_name = jobnet_name
-      @jobs = jobs
-
+      @jobnet_dao = Bricolage::DAO::JobNet.new(@ds)
+      @job_dao = Bricolage::DAO::Job.new(@ds)
       @jobexecution_dao = Bricolage::DAO::JobExecution.new(@ds)
+
+      @executor_id = executor_id
+      @jobnet = @jobnet_dao.find_or_create(subsys, jobnet_name)
+      @jobs = job_refs.map {|jobref| @job_dao.find_or_create(jobref.subsystem.to_s, jobref.name, @jobnet.id) }
     end
 
     def queued?
@@ -170,23 +170,27 @@ module Bricolage
     end
 
     def consume_each
-      lock
+      lock_jobnet
+
       while task = self.next
-        dequeuing
+        job_execution = dequeuing
+
+        lock_job(job_execution.first.job_id)
 
         @ds.clear_connection_pool
         task_result = yield task # running execute_job
 
+        unlock_job(job_execution.first.job_id)
+
         if task_result.success?
           dequeued
         else
-          @jobexecution_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
-                                   set:   {status: 'failed', message: task_result.message})
+          fail_without_dequeue(task_result)
           break
         end
       end
     ensure
-      unlock
+      unlock_jobnet
     end
 
     def enqueue(task)
@@ -199,21 +203,24 @@ module Bricolage
       task = @queue.first
       @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
                                set:   {status: 'running', started_at: :now})
-      task
     end
 
     def dequeued
       task = @queue.shift
       @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
                                set:   {status: 'succeeded', finished_at: :now})
-      task
+    end
+
+    def fail_without_dequeue(task_result)
+      task = @queue.first
+      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
+                               set:   {status: 'failed', message: task_result.message})
     end
 
     def restore
       job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
                                                jobnet_name: @jobnet.jobnet_name,
                                                status: ['waiting', 'running', 'failed'])
-
       job_executions.each do |je|
         enqueue JobTask.for_job_execution(je)
       end
@@ -221,38 +228,53 @@ module Bricolage
 
     def enqueue_job_executions
       @jobs.each do |job|
-        @jobexecution_dao.upsert(set: {status: 'waiting', job_id: job.id, message: nil, lock: false})
+        @jobexecution_dao.upsert(set: {status: 'waiting', job_id: job.id, message: nil})
       end
     end
 
     def locked?
-      count = @jobexecution_dao
-                .where(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
-                .count
-      count > 0
+      jobnet_lock = @jobnet_dao.check_lock(@jobnet.id)
+      jobs_lock = @job_dao.check_lock(@jobs.map(&:id))
+      jobnet_lock || jobs_lock
     end
 
-    def lock
-      @jobexecution_dao.update(where: {subsystem: @subsys, jobnet_name: @jobnet_name},
-                               set:   {lock: true})
+    def lock_job(job_id)
+      lock_results = @job_dao.update(where: {job_id: job_id, executor_id: nil},
+                                     set:   {executor_id: @executor_id})
+      raise "Already locked id:#{job_id} job" if lock_results.empty?
     end
 
-    def unlock
-      @jobexecution_dao.update(where: {subsystem: @subsys, jobnet_name: @jobnet_name},
-                               set:   {lock: false})
+    def lock_jobnet
+      lock_results = @jobnet_dao.update(where: {jobnet_id: @jobnet.id, executor_id: nil},
+                                        set:   {executor_id: @executor_id})
+      raise "Already locked id:#{@jobnet.id} jobnet" if lock_results.empty?
     end
 
-    def locked_records
-      @jobexecution_dao.where(subsystem: @subsys, jobnet_name: @jobnet_name, lock: true)
+    def unlock_job(job_id)
+      @job_dao.update(where: {job_id: job_id},
+                      set:   {executor_id: nil})
+    end
+
+    def unlock_jobnet
+      @jobnet_dao.update(where: {jobnet_id: @jobnet.id},
+                         set:   {executor_id: nil})
+    end
+
+    def locked_jobs
+      @job_dao.where(jobnet_id: @jobnet.id).reject {|job| job.executor_id.nil? }
     end
 
     def unlock_help
-      "remove the id records from job_executions: #{locked_records.map(&:job_execution_id)}"
+      "Jobs with these ID are locked: #{locked_jobs.map(&:id)}"
     end
 
     # for debug to test
     def clear
-      @jobexecution_dao.update(where: {subsystem: @subsys, jobnet_name: @jobnet_name},
+      @jobnet_dao.update(where: {jobnet_id: @jobnet.id},
+                         set:   {executor_id: nil})
+      @job_dao.update(where: {job_id: @jobs.map(&:id)},
+                      set:   {executor_id: nil})
+      @jobexecution_dao.update(where: {'je.job_id': @jobs.map(&:id)},
                                set:   {status: 'succeeded'})
     end
   end
