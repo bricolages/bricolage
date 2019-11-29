@@ -71,18 +71,18 @@ module Bricolage
 
     test "#enqueue/#dequeuing/#dequeued" do
       queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_equal 0, queue.size
+      assert_equal 2, queue.size
       queue.enqueue jobtask1
-      assert_equal 1, queue.size
+      assert_equal 3, queue.size
       queue.dequeuing
-      assert_equal 1, queue.size
+      assert_equal 3, queue.size
       queue.dequeued
-      assert_equal 0, queue.size
+      assert_equal 2, queue.size
     end
 
     test "DatabaseTaskQueue.restore_if_exist" do
       queue1 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_equal 0, queue1.size
+      assert_equal 2, queue1.size
       queue1.enqueue jobtask1
       queue1.enqueue jobtask2
       queue1.dequeuing
