@@ -171,22 +171,18 @@ module Bricolage
       @jobs = job_refs.map {|jobref| @job_dao.find_or_create(jobref.subsystem.to_s, jobref.name, @jobnet.id) }
     end
 
-    def queued?
-      !@queue.empty?
-    end
-
     def consume_each
       lock_jobnet
 
       while task = self.next
-        job_execution = dequeuing
+        dequeuing
 
-        lock_job(job_execution.first.job_id)
+        lock_job(task.job_id)
 
         @ds.clear_connection_pool
         task_result = yield task # running execute_job
 
-        unlock_job(job_execution.first.job_id)
+        unlock_job(task.job_id)
 
         if task_result.success?
           dequeued
@@ -228,15 +224,16 @@ module Bricolage
       job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
                                                job_name: @jobs.map(&:job_name),
                                                jobnet_name: @jobnet.jobnet_name,
-      job_executions.each do |je|
-        enqueue JobTask.for_job_execution(je)
-      end
                                                status: [STATUS_WAIT, STATUS_RUN, STATUS_FAILURE])
+      job_executions.each { |je| enqueue(je) }
     end
 
     def enqueue_job_executions
       @jobs.each do |job|
         job_execution = @jobexecution_dao.create(job.id, STATUS_WAIT)
+        job_execution.job_name = job.job_name
+        job_execution.subsystem = job.subsystem
+        @queue.push JobTask.for_job_execution(job_execution)
       end
     end
 
@@ -289,15 +286,19 @@ module Bricolage
   end
 
   class JobTask
-    def initialize(job)
+    def initialize(job, job_execution=nil)
       @job = job
       @job_name = job.name
       @subsystem = job.subsystem
+      @job_id = job_execution&.job_id
+      @job_execution_id = job_execution&.job_execution_id
     end
 
     attr_reader :job
     attr_reader :subsystem
     attr_reader :job_name
+    attr_reader :job_id
+    attr_reader :job_execution_id
 
     def serialize
       [@job].join("\t")
@@ -309,7 +310,8 @@ module Bricolage
     end
 
     def JobTask.for_job_execution(job_execution)
-      new(JobNet::JobRef.new(job_execution.subsystem, job_execution.job_name, JobNet::Location.dummy))
+      jobref = JobNet::JobRef.new(job_execution.subsystem, job_execution.job_name, JobNet::Location.dummy)
+      new(jobref, job_execution)
     end
   end
 
