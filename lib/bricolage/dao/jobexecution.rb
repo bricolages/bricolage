@@ -27,6 +27,20 @@ module Bricolage
         @datasource = datasource
       end
 
+      def create(job_id, status)
+        job_execution = @datasource.open_shared_connection do |conn|
+          conn.query_row(<<~SQL)
+            insert into job_executions ("job_id", status)
+                values (#{job_id}, #{s(status)})
+                returning *
+            ;
+          SQL
+        end
+        job_execution = JobExecution.for_record(job_execution)
+        JobExecutionState.job_executions_change(@datasource, [job_execution])
+        job_execution
+      end
+
       def where(**args)
         where_clause = compile_where_expr(args)
 
