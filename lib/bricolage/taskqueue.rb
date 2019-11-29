@@ -234,7 +234,7 @@ module Bricolage
 
     def enqueue_job_executions
       @jobs.each do |job|
-        @jobexecution_dao.upsert(set: {status: 'waiting', job_id: job.id, message: nil})
+        job_execution = @jobexecution_dao.create(job.id, STATUS_WAIT)
       end
     end
 
