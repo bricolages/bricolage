@@ -198,32 +198,34 @@ module Bricolage
       unlock_jobnet
     end
 
-    def enqueue(task)
-      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
-      @queue.push task
+    def enqueue(job_execution)
+      job_execution_id = job_execution.job_execution_id
+      @jobexecution_dao.update(where: {job_execution_id: job_execution_id},
                                set:   {status: STATUS_WAIT, message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
+      @queue.push JobTask.for_job_execution(job_execution)
     end
 
     def dequeuing
       task = @queue.first
-      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
+      job_executions = @jobexecution_dao.update(where: {job_execution_id: task.job_execution_id},
                                                 set:   {status: STATUS_RUN, started_at: :now})
     end
 
     def dequeued
       task = @queue.shift
-      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
+      @jobexecution_dao.update(where: {job_execution_id: task.job_execution_id},
                                set:   {status: STATUS_SUCCESS, finished_at: :now})
     end
 
     def fail_without_dequeue(task_result)
       task = @queue.first
-      @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
+      @jobexecution_dao.update(where: {job_execution_id: task.job_execution_id},
                                set:   {status: STATUS_FAILURE, message: task_result.message})
     end
 
     def restore
       job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
+                                               job_name: @jobs.map(&:job_name),
                                                jobnet_name: @jobnet.jobnet_name,
       job_executions.each do |je|
         enqueue JobTask.for_job_execution(je)
@@ -243,8 +245,9 @@ module Bricolage
       jobnet_lock || jobs_lock
     end
 
-    def lock_job(task)
-      lock_results = @job_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name, executor_id: nil},
+    def lock_job(job_id)
+      raise "Invalid job_id" if job_id.nil?
+      lock_results = @job_dao.update(where: {job_id: job_id, executor_id: nil},
                                      set:   {executor_id: @executor_id})
       raise DoubleLockError, "Already locked id:#{job_id} job" if lock_results.empty?
     end
