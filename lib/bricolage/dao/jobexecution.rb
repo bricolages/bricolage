@@ -4,16 +4,23 @@ module Bricolage
 
       include  SQLUtils
 
+      STATUS_WAIT    = 'waiting'.freeze
+      STATUS_SUCCESS = 'succeeded'.freeze
+      STATUS_RUN     = 'running'.freeze
+      STATUS_FAILURE = 'failed'.freeze
+
       Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :status, :message,
                               :submitted_at, :lock,:started_at, :finished_at, :source,
                               :job_name, :jobnet_name, :executor_id, :subsystem,
                               keyword_init: true)
 
-      def JobExecution.for_record(job_executions)
-        job_executions.map do |je|
-          je_sym_hash = Hash[ je.map{|k,v| [k.to_sym, v] } ]
+      def JobExecution.for_record(job_execution)
+          je_sym_hash = Hash[ job_execution.map{ |k,v| [k.to_sym, v] } ]
           Attributes.new(**je_sym_hash)
-        end
+      end
+
+      def JobExecution.for_records(job_executions)
+        job_executions.map { |je| JobExecution.for_record(je) }
       end
 
       def initialize(datasource)
@@ -40,7 +47,7 @@ module Bricolage
         if job_executions.empty?
           []
         else
-          JobExecution.for_record(job_executions)
+          JobExecution.for_records(job_executions)
         end
       end
 
@@ -64,7 +71,7 @@ module Bricolage
           SQL
         end
 
-        job_executions = JobExecution.for_record(job_executions)
+        job_executions = JobExecution.for_records(job_executions)
         JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
       end
@@ -83,7 +90,7 @@ module Bricolage
           SQL
         end
 
-        job_executions = JobExecution.for_record(job_executions)
+        job_executions = JobExecution.for_records(job_executions)
         JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
       end
