@@ -141,6 +141,12 @@ module Bricolage
   end
 
   class DatabaseTaskQueue < TaskQueue
+
+    STATUS_WAIT    = Bricolage::DAO::JobExecution::STATUS_WAIT
+    STATUS_SUCCESS = Bricolage::DAO::JobExecution::STATUS_SUCCESS
+    STATUS_RUN     = Bricolage::DAO::JobExecution::STATUS_RUN
+    STATUS_FAILURE = Bricolage::DAO::JobExecution::STATUS_FAILURE
+
     def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, executor_id)
       jobnet_subsys, jobnet_name = jobnet_ref.name.delete('*').split('/')
       job_refs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
@@ -194,35 +200,35 @@ module Bricolage
 
     def enqueue(task)
       @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
-                               set:   {status: 'waiting', message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
       @queue.push task
+                               set:   {status: STATUS_WAIT, message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
     end
 
     def dequeuing
       task = @queue.first
       @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
-                               set:   {status: 'running', started_at: :now})
+                                                set:   {status: STATUS_RUN, started_at: :now})
     end
 
     def dequeued
       task = @queue.shift
       @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
-                               set:   {status: 'succeeded', finished_at: :now})
+                               set:   {status: STATUS_SUCCESS, finished_at: :now})
     end
 
     def fail_without_dequeue(task_result)
       task = @queue.first
       @jobexecution_dao.update(where: {'j.subsystem': task.subsystem, job_name: task.job_name},
-                               set:   {status: 'failed', message: task_result.message})
+                               set:   {status: STATUS_FAILURE, message: task_result.message})
     end
 
     def restore
       job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
                                                jobnet_name: @jobnet.jobnet_name,
-                                               status: ['waiting', 'running', 'failed'])
       job_executions.each do |je|
         enqueue JobTask.for_job_execution(je)
       end
+                                               status: [STATUS_WAIT, STATUS_RUN, STATUS_FAILURE])
     end
 
     def enqueue_job_executions
@@ -274,7 +280,7 @@ module Bricolage
       @job_dao.update(where: {job_id: @jobs.map(&:id)},
                       set:   {executor_id: nil})
       @jobexecution_dao.update(where: {'je.job_id': @jobs.map(&:id)},
-                               set:   {status: 'succeeded'})
+                               set:   {status: STATUS_SUCCESS})
     end
   end
 
