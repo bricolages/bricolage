@@ -265,7 +265,7 @@ module Bricolage
     end
 
     def unlock_help
-      "Jobs with these ID are locked: #{locked_jobs.map(&:id)}"
+      "update the job_id records to unlock from job tables: #{locked_jobs.map(&:id)}"
     end
 
     # for debug to test
