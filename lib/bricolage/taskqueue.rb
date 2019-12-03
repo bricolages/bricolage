@@ -173,19 +173,18 @@ module Bricolage
       lock_jobnet
 
       while task = self.next
-        job_execution = dequeuing
+        lock_job(task)
 
-        lock_job(job_execution.first.job_id)
-
+        dequeuing
         @ds.clear_connection_pool
         task_result = yield task # running execute_job
 
-        unlock_job(job_execution.first.job_id)
-
         if task_result.success?
           dequeued
+          unlock_job(task)
         else
           fail_without_dequeue(task_result)
+          unlock_job(task)
           break
         end
       end
@@ -238,20 +237,20 @@ module Bricolage
       jobnet_lock || jobs_lock
     end
 
-    def lock_job(job_id)
-      lock_results = @job_dao.update(where: {job_id: job_id, executor_id: nil},
+    def lock_job(task)
+      lock_results = @job_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name, executor_id: nil},
                                      set:   {executor_id: @executor_id})
-      raise "Already locked id:#{job_id} job" if lock_results.empty?
+      raise DoubleLockError, "Already locked id:#{job_id} job" if lock_results.empty?
     end
 
     def lock_jobnet
       lock_results = @jobnet_dao.update(where: {jobnet_id: @jobnet.id, executor_id: nil},
                                         set:   {executor_id: @executor_id})
-      raise "Already locked id:#{@jobnet.id} jobnet" if lock_results.empty?
+      raise DoubleLockError, "Already locked id:#{@jobnet.id} jobnet" if lock_results.empty?
     end
 
-    def unlock_job(job_id)
-      @job_dao.update(where: {job_id: job_id},
+    def unlock_job(task)
+      @job_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
                       set:   {executor_id: nil})
     end
 
