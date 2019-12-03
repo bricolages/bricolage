@@ -30,6 +30,10 @@ module Bricolage
   # Aquiring lock takes too long (e.g. VACUUM lock)
   class LockTimeout < JobFailure; end
 
+  # The executing jobnet or job is already locked.
+  # You should wait to unlock by another job execution or force to unlock manually.
+  class DoubleLockError < JobFailure; end
+
   # S3 related exceptions
   class S3Exception < JobFailureByException; end
 
