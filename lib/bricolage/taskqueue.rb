@@ -192,9 +192,9 @@ module Bricolage
     def enqueue(job_execution)
       job_execution_id = job_execution.job_execution_id
       @jobexecution_dao.update(where: {job_execution_id: job_execution_id},
-      @queue.push JobTask.for_job_execution(job_execution)
                                set:   {status: Bricolage::DAO::JobExecution::STATUS_WAIT,
                                        message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
+      @queue.push JobExecutionTask.for_job_execution(job_execution)
     end
 
     def dequeuing
@@ -233,7 +233,7 @@ module Bricolage
         job_execution = @jobexecution_dao.create(job.id, Bricolage::DAO::JobExecution::STATUS_WAIT)
         job_execution.job_name = job.job_name
         job_execution.subsystem = job.subsystem
-        @queue.push JobTask.for_job_execution(job_execution)
+        @queue.push JobExecutionTask.for_job_execution(job_execution)
       end
     end
 
@@ -243,9 +243,9 @@ module Bricolage
       jobnet_lock || jobs_lock
     end
 
-    def lock_job(job_id)
-      raise "Invalid job_id" if job_id.nil?
-      lock_results = @job_dao.update(where: {job_id: job_id, executor_id: nil},
+    def lock_job(task)
+      raise "Invalid job_id" if task.job_id.nil?
+      lock_results = @job_dao.update(where: {job_id: task.job_id, executor_id: nil},
                                      set:   {executor_id: @executor_id})
       raise DoubleLockError, "Already locked id:#{job_id} job" if lock_results.empty?
     end
@@ -257,7 +257,7 @@ module Bricolage
     end
 
     def unlock_job(task)
-      @job_dao.update(where: {subsystem: task.subsystem, job_name: task.job_name},
+      @job_dao.update(where: {job_id: task.job_id},
                       set:   {executor_id: nil})
     end
 
@@ -286,19 +286,11 @@ module Bricolage
   end
 
   class JobTask
-    def initialize(job, job_execution=nil)
+    def initialize(job)
       @job = job
-      @job_name = job.name
-      @subsystem = job.subsystem
-      @job_id = job_execution&.job_id
-      @job_execution_id = job_execution&.job_execution_id
     end
 
     attr_reader :job
-    attr_reader :subsystem
-    attr_reader :job_name
-    attr_reader :job_id
-    attr_reader :job_execution_id
 
     def serialize
       [@job].join("\t")
@@ -308,8 +300,24 @@ module Bricolage
       job, * = str.strip.split("\t")
       new(JobNet::Ref.parse(job))
     end
+  end
 
-    def JobTask.for_job_execution(job_execution)
+  class JobExecutionTask
+    def initialize(job, job_execution)
+      @job = job
+      @job_name = job.name
+      @subsystem = job.subsystem.to_s
+      @job_id = job_execution.job_id
+      @job_execution_id = job_execution.job_execution_id
+    end
+
+    attr_reader :job
+    attr_reader :job_name
+    attr_reader :subsystem
+    attr_reader :job_id
+    attr_reader :job_execution_id
+
+    def JobExecutionTask.for_job_execution(job_execution)
       jobref = JobNet::JobRef.new(job_execution.subsystem, job_execution.job_name, JobNet::Location.dummy)
       new(jobref, job_execution)
     end
