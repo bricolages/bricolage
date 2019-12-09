@@ -19,7 +19,7 @@ module Bricolage
       end
 
       def find_by(subsystem, jobnet_name)
-        jobnet = @datasource.open_shared_connection do |conn|
+        record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
             select
                 jobnet_id
@@ -35,15 +35,15 @@ module Bricolage
           SQL
         end
 
-        if jobnet.nil?
+        if record.nil?
           nil
         else
-          JobNet.for_record(jobnet)
+          JobNet.for_record(record)
         end
       end
 
       def create(subsystem, jobnet_name)
-        jobnet = @datasource.open_shared_connection do |conn|
+        record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
             insert into jobnets ("subsystem", jobnet_name)
                 values (#{s(subsystem)}, #{s(jobnet_name)})
@@ -52,7 +52,7 @@ module Bricolage
           SQL
         end
 
-        JobNet.for_record(jobnet)
+        JobNet.for_record(record)
       end
 
       def find_or_create(subsystem, jobnet_name)
@@ -62,7 +62,7 @@ module Bricolage
       def where(**args)
         where_clause = compile_where_expr(args)
 
-        jobnets = @datasource.open_shared_connection do |conn|
+        records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
             select
                 *
@@ -74,10 +74,10 @@ module Bricolage
           SQL
         end
 
-        if jobnets.empty?
+        if records.empty?
           []
         else
-          JobNet.for_records(jobnets)
+          JobNet.for_records(records)
         end
       end
 
@@ -87,27 +87,27 @@ module Bricolage
 
         where_clause = compile_where_expr(where)
 
-        jobnets = @datasource.open_shared_connection do |conn|
+        records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
             update jobnets set #{set_clause} where #{where_clause} returning *;
           SQL
         end
 
-        if jobnets.empty?
+        if records.empty?
           []
         else
-          JobNet.for_records(jobnets)
+          JobNet.for_records(records)
         end
       end
 
       def check_lock(jobnet_id)
-        jobnet = @datasource.open_shared_connection do |conn|
+        record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
             select jobnet_id from jobnets where jobnet_id = #{jobnet_id} and executor_id is not null;
           SQL
         end
 
-        jobnet != nil
+        record != nil
       end
 
     end
