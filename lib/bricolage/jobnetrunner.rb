@@ -15,6 +15,9 @@ require 'bricolage/version'
 require 'fileutils'
 require 'pathname'
 require 'optparse'
+require 'socket'
+require 'net/http'
+require 'json'
 
 module Bricolage
 
@@ -103,13 +106,27 @@ module Bricolage
       if opts.db_name
         datasource = @ctx.get_data_source('psql', opts.db_name)
         jobnet = jobnet.jobnets.first
+        executor_id = get_executor_id(opts.executor_type)
         logger.info "DB connect: #{opts.db_name}"
-        DatabaseTaskQueue.restore_if_exist(datasource, jobnet)
+        DatabaseTaskQueue.restore_if_exist(datasource, jobnet, executor_id)
       elsif path = get_queue_file_path(opts)
         logger.info "queue path: #{path}"
         FileTaskQueue.restore_if_exist(path)
       else
         TaskQueue.new
+      end
+    end
+
+    def get_executor_id(executor_type)
+      # executor_id is 'TaskID:PID' or 'Hostname:PID'
+      if executor_type == 'ecs'
+        uri = URI.parse("#{ENV['ECS_CONTAINER_METADATA_URI']}/task")
+        response = Net::HTTP.get_response(uri)
+        task_id = JSON.parse(response.body)['TaskARN'].split('/').last
+        "#{task_id}:#{$$}"
+      else
+        hostname = Socket.gethostname
+        "#{hostname}:#{$$}"
       end
     end
 
@@ -237,7 +254,8 @@ module Bricolage
           'local-state-dir' => OptionValue.new('default value', '/tmp/bricolage'),
           'enable-queue' => OptionValue.new('default value', false),
           'queue-path' => OptionValue.new('default value', nil),
-          'db-name' => OptionValue.new('default value', nil)
+          'db-name' => OptionValue.new('default value', nil),
+          'ecs-executor' => OptionValue.new('default value', false)
         })
       end
       private :opts_default
@@ -291,6 +309,10 @@ Options:
         parser.on('--db-name=DB_NAME', 'Enables job queue with this database.') {|db_name|
           @opts_cmdline['db-name'] = OptionValue.new('--db-name option', db_name)
         }
+        parser.on('--ecs-executor', 'Set executor type as ECS ') {
+          @opts_cmdline['ecs-executor'] = OptionValue.new('--ecs-executor option', true)
+        }
+
         parser.on('-c', '--check-only', 'Checks job parameters and quit without executing.') {
           @check_only = true
         }
@@ -372,6 +394,15 @@ Options:
           opt.value
         else
           nil
+        end
+      end
+
+      def executor_type
+        opt = @opts['ecs-executor']
+        if opt.value
+          'ecs'
+        else
+          'ec2'
         end
       end
 

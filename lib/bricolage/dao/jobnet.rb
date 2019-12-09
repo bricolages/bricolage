@@ -4,19 +4,28 @@ module Bricolage
 
       include SQLUtils
 
-      Attributes = Struct.new(:id, :subsystem, :jobnet_name)
+      Attributes = Struct.new(:id, :subsystem, :jobnet_name, :executor_id)
+
+      def JobNet.for_record(jobnet)
+        Attributes.new(*jobnet.values)
+      end
+
+      def JobNet.for_records(jobnets)
+        jobnets.map { |jobnet| JobNet.for_record(jobnet) }
+      end
 
       def initialize(datasource)
         @datasource = datasource
       end
 
-      def find(subsystem, jobnet_name)
+      def find_by(subsystem, jobnet_name)
         jobnet = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
             select
                 jobnet_id
                 , "subsystem"
                 , jobnet_name
+                , executor_id
             from
                 jobnets
             where
@@ -29,7 +38,7 @@ module Bricolage
         if jobnet.nil?
           nil
         else
-          Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])
+          JobNet.for_record(jobnet)
         end
       end
 
@@ -43,12 +52,64 @@ module Bricolage
           SQL
         end
 
-        Attributes.new(jobnet['jobnet_id'], jobnet['subsystem'], jobnet['jobnet_name'])
+        JobNet.for_record(jobnet)
       end
 
       def find_or_create(subsystem, jobnet_name)
-        find(subsystem, jobnet_name) || create(subsystem, jobnet_name)
+        find_by(subsystem, jobnet_name) || create(subsystem, jobnet_name)
       end
+
+      def where(**args)
+        where_clause = compile_where_expr(args)
+
+        jobnets = @datasource.open_shared_connection do |conn|
+          conn.query_rows(<<~SQL)
+            select
+                *
+            from
+                jobnets
+            where
+                #{where_clause}
+            ;
+          SQL
+        end
+
+        if jobnets.empty?
+          []
+        else
+          JobNet.for_records(jobnets)
+        end
+      end
+
+      def update(where:, set:)
+        set_columns, set_values = compile_set_expr(set)
+        set_clause = set.map{|k,v| "#{k} = #{convert_value(v)}"}.join(', ')
+
+        where_clause = compile_where_expr(where)
+
+        jobnets = @datasource.open_shared_connection do |conn|
+          conn.query_rows(<<~SQL)
+            update jobnets set #{set_clause} where #{where_clause} returning *;
+          SQL
+        end
+
+        if jobnets.empty?
+          []
+        else
+          JobNet.for_records(jobnets)
+        end
+      end
+
+      def check_lock(jobnet_id)
+        jobnet = @datasource.open_shared_connection do |conn|
+          conn.query_row(<<~SQL)
+            select jobnet_id from jobnets where jobnet_id = #{jobnet_id} and executor_id is not null;
+          SQL
+        end
+
+        jobnet != nil
+      end
+
     end
   end
 end
