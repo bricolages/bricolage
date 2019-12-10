@@ -4,26 +4,47 @@ module Bricolage
 
       include  SQLUtils
 
+      STATUS_WAIT    = 'waiting'.freeze
+      STATUS_SUCCESS = 'succeeded'.freeze
+      STATUS_RUN     = 'running'.freeze
+      STATUS_FAILURE = 'failed'.freeze
+
       Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :status, :message,
                               :submitted_at, :lock,:started_at, :finished_at, :source,
                               :job_name, :jobnet_name, :executor_id, :subsystem,
                               keyword_init: true)
 
-      def JobExecution.for_record(job_executions)
-        job_executions.map do |je|
-          je_sym_hash = Hash[ je.map{|k,v| [k.to_sym, v] } ]
+      def JobExecution.for_record(job_execution)
+          je_sym_hash = Hash[ job_execution.map{ |k,v| [k.to_sym, v] } ]
           Attributes.new(**je_sym_hash)
-        end
+      end
+
+      def JobExecution.for_records(job_executions)
+        job_executions.map { |je| JobExecution.for_record(je) }
       end
 
       def initialize(datasource)
         @datasource = datasource
       end
 
+      def create(job_id, status)
+        record = @datasource.open_shared_connection do |conn|
+          conn.query_row(<<~SQL)
+            insert into job_executions ("job_id", status)
+                values (#{job_id}, #{s(status)})
+                returning *
+            ;
+          SQL
+        end
+        job_execution = JobExecution.for_record(record)
+        JobExecutionState.job_executions_change(@datasource, [job_execution])
+        job_execution
+      end
+
       def where(**args)
         where_clause = compile_where_expr(args)
 
-        job_executions = @datasource.open_shared_connection do |conn|
+        records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
             select
                 *
@@ -37,10 +58,10 @@ module Bricolage
           SQL
         end
 
-        if job_executions.empty?
+        if records.empty?
           []
         else
-          JobExecution.for_record(job_executions)
+          JobExecution.for_records(records)
         end
       end
 
@@ -49,7 +70,7 @@ module Bricolage
         set_clause = set.map{|k,v| "#{k} = #{convert_value(v)}"}.join(', ')
 
         where_clause = compile_where_expr(where)
-        job_executions = @datasource.open_shared_connection do |conn|
+        records = @datasource.open_shared_connection do |conn|
           conn.execute_update(<<~SQL)
             update job_executions je
             set #{set_clause}
@@ -64,7 +85,7 @@ module Bricolage
           SQL
         end
 
-        job_executions = JobExecution.for_record(job_executions)
+        job_executions = JobExecution.for_records(records)
         JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
       end
@@ -73,7 +94,7 @@ module Bricolage
         set_columns, set_values = compile_set_expr(set)
         set_clause = set.map{|k,v| "#{k} = #{convert_value(v)}"}.join(', ')
 
-        job_executions = @datasource.open_shared_connection do |conn|
+        records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
             insert into job_executions (#{set_columns})
                 values (#{set_values})
@@ -83,7 +104,7 @@ module Bricolage
           SQL
         end
 
-        job_executions = JobExecution.for_record(job_executions)
+        job_executions = JobExecution.for_records(records)
         JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
       end

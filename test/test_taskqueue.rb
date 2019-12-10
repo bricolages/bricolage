@@ -55,39 +55,31 @@ module Bricolage
     jobnet_ref = RootJobNet.load_auto(context, [jobnet_path]).jobnets.first
     jobrefs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
 
-    jobtask1 = JobTask.new(jobrefs.pop)
-    jobtask2 = JobTask.new(jobrefs.pop)
-
-    job_dao = Bricolage::DAO::Job.new(datasource)
-    jobnet_dao = Bricolage::DAO::JobNet.new(datasource)
-    jobnet = jobnet_dao.find_or_create('subsys','net1')
-    job1 = job_dao.find_or_create('subsys', 'job1', jobnet.id)
-    job2 = job_dao.find_or_create('subsys', 'job2', jobnet.id)
-
     teardown do
-      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
+      queue = DatabaseTaskQueue.new(datasource, 'subsys', 'net1', jobrefs, 'dummy_executor')
       queue.clear
     end
 
     test "#enqueue/#dequeuing/#dequeued" do
-      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
+      queue = DatabaseTaskQueue.new(datasource, 'subsys', 'net1', jobrefs, 'dummy_executor')
       assert_equal 0, queue.size
-      queue.enqueue jobtask1
-      assert_equal 1, queue.size
+      queue.enqueue_job_executions
+      assert_equal 2, queue.size
       queue.dequeuing
+      assert_equal 2, queue.size
+      e = queue.dequeued
       assert_equal 1, queue.size
-      queue.dequeued
-      assert_equal 0, queue.size
+      queue.enqueue e.first
+      assert_equal 2, queue.size
     end
 
     test "DatabaseTaskQueue.restore_if_exist" do
       queue1 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_equal 0, queue1.size
-      queue1.enqueue jobtask1
-      queue1.enqueue jobtask2
+      assert_equal 2, queue1.size
       queue1.dequeuing
+      queue1.dequeued
       queue2 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_equal 2, queue2.size
+      assert_equal 1, queue2.size
     end
 
     test "#lock_jobnet/#unlock_jobnet" do
@@ -101,12 +93,11 @@ module Bricolage
 
     test "#lock_job/#unlock_job" do
       queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_false  queue.locked?
-
-      queue.lock_job(jobtask1)
+      assert_false queue.locked?
+      task = queue.next
+      queue.lock_job(task)
       assert_true  queue.locked?
-
-      queue.unlock_job(jobtask1)
+      queue.unlock_job(task)
       assert_false queue.locked?
     end
   end

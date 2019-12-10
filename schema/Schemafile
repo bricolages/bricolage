@@ -21,7 +21,6 @@ create_table "job_executions", primary_key: "job_execution_id", force: :cascade 
   t.datetime "started_at"
   t.datetime "finished_at"
   t.string   "source"
-  t.index ["job_id"], name: "job_id_unique", unique: true, using: :btree
 end
 
 create_table "job_execution_states", primary_key: "job_execution_state_id", force: :cascade do |t|
