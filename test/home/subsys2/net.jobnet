@@ -1,0 +1,4 @@
+job1
+-> subsys/job5
+-> *subsys/net1 # has 4 jobs
+-> job2
