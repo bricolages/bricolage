@@ -143,8 +143,9 @@ module Bricolage
   class DatabaseTaskQueue < TaskQueue
 
     def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, executor_id)
-      jobnet_subsys, jobnet_name = jobnet_ref.name.delete('*').split('/')
-      job_refs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
+      jobnet_subsys, jobnet_name = jobnet_ref.start_jobnet.name.delete('*').split('/')
+      job_refs = jobnet_ref.sequential_jobs
+
       q = new(datasource, jobnet_subsys, jobnet_name, job_refs, executor_id)
 
       return q if q.locked?

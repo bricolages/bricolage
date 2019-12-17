@@ -105,7 +105,6 @@ module Bricolage
     def get_queue(opts, jobnet)
       if opts.db_name
         datasource = @ctx.get_data_source('psql', opts.db_name)
-        jobnet = jobnet.jobnets.first
         executor_id = get_executor_id(opts.executor_type)
         logger.info "DB connect: #{opts.db_name}"
         DatabaseTaskQueue.restore_if_exist(datasource, jobnet, executor_id)

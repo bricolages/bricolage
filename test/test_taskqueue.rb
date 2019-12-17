@@ -52,8 +52,8 @@ module Bricolage
     context = Context.for_application(home_path='test/home')
     datasource = context.get_data_source('psql', 'test_db')
     jobnet_path = Pathname.new('test/home/subsys/net1.jobnet')
-    jobnet_ref = RootJobNet.load_auto(context, [jobnet_path]).jobnets.first
-    jobrefs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
+    jobnet_ref = RootJobNet.load_auto(context, [jobnet_path])
+    jobrefs = jobnet_ref.sequential_jobs
 
     teardown do
       queue = DatabaseTaskQueue.new(datasource, 'subsys', 'net1', jobrefs, 'dummy_executor')
@@ -64,22 +64,22 @@ module Bricolage
       queue = DatabaseTaskQueue.new(datasource, 'subsys', 'net1', jobrefs, 'dummy_executor')
       assert_equal 0, queue.size
       queue.enqueue_job_executions
-      assert_equal 2, queue.size
+      assert_equal 4, queue.size
       queue.dequeuing
-      assert_equal 2, queue.size
+      assert_equal 4, queue.size
       e = queue.dequeued
-      assert_equal 1, queue.size
+      assert_equal 3, queue.size
       queue.enqueue e.first
-      assert_equal 2, queue.size
+      assert_equal 4, queue.size
     end
 
     test "DatabaseTaskQueue.restore_if_exist" do
       queue1 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_equal 2, queue1.size
+      assert_equal 4, queue1.size
       queue1.dequeuing
       queue1.dequeued
       queue2 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
-      assert_equal 1, queue2.size
+      assert_equal 3, queue2.size
     end
 
     test "#lock_jobnet/#unlock_jobnet" do
@@ -99,6 +99,18 @@ module Bricolage
       assert_true  queue.locked?
       queue.unlock_job(task)
       assert_false queue.locked?
+    end
+
+    test "parse jobnet in jobnet" do
+      queue = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, 'dummy_executor')
+      assert_equal 4, queue.size
+    end
+
+    test "parse job/jobnet for another subsystem" do
+      jobnet_path2 = Pathname.new('test/home/subsys2/net.jobnet')
+      jobnet_ref2 = RootJobNet.load_auto(context, [jobnet_path2])
+      queue2 = DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref2, 'dummy_executor')
+      assert_equal 7, queue2.size
     end
   end
 end
