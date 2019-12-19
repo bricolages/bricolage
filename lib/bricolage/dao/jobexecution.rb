@@ -49,6 +49,7 @@ module Bricolage
           conn.query_rows(<<~SQL)
             select
                 *
+                , j.subsystem as subsystem
             from
                 job_executions je
                 join jobs j using(job_id)
@@ -81,7 +82,7 @@ module Bricolage
             where
                 je.job_id = j.job_id
                 and #{where_clause}
-            returning *
+            returning *, j.subsystem as subsystem
             ;
           SQL
         end
