@@ -8,6 +8,7 @@ module Bricolage
       STATUS_SUCCESS = 'succeeded'.freeze
       STATUS_RUN     = 'running'.freeze
       STATUS_FAILURE = 'failed'.freeze
+      STATUS_CANCEL = 'canceled'.freeze
 
       Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :status, :message,
                               :submitted_at, :lock,:started_at, :finished_at, :source,
@@ -107,6 +108,23 @@ module Bricolage
         job_executions = JobExecution.for_records(records)
         JobExecutionState.job_executions_change(@datasource, job_executions)
         job_executions
+      end
+
+      def delete(**args)
+        where_clause = compile_where_expr(args)
+        @datasource.open_shared_connection do |conn|
+          conn.query_rows(<<~SQL)
+            begin;
+              delete from job_execution_states as jes
+                using job_executions as je
+                where
+                  jes.job_execution_id = je.job_execution_id
+                  and #{where_clause}
+              ;
+              delete from job_executions as je where #{where_clause};
+            commit;
+          SQL
+        end
       end
     end
 

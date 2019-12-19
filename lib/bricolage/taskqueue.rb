@@ -155,6 +155,14 @@ module Bricolage
       q
     end
 
+    def DatabaseTaskQueue.clear_queue(datasource, jobnet_ref)
+      jobnet_subsys, jobnet_name = jobnet_ref.start_jobnet.name.delete('*').split('/')
+      job_refs = jobnet_ref.sequential_jobs
+
+      q = new(datasource, jobnet_subsys, jobnet_name, job_refs, nil)
+      q.clear
+    end
+
     def initialize(datasource, subsys, jobnet_name, job_refs, executor_id)
       super()
       @ds = datasource
@@ -275,14 +283,16 @@ module Bricolage
       "update the job_id records to unlock from job tables: #{locked_jobs.map(&:id)}"
     end
 
-    # for debug to test
     def clear
-      @jobnet_dao.update(where: {jobnet_id: @jobnet.id},
-                         set:   {executor_id: nil})
-      @job_dao.update(where: {job_id: @jobs.map(&:id)},
-                      set:   {executor_id: nil})
       @jobexecution_dao.update(where: {'je.job_id': @jobs.map(&:id)},
-                               set:   {status: Bricolage::DAO::JobExecution::STATUS_SUCCESS})
+                               set:   {status: Bricolage::DAO::JobExecution::STATUS_CANCEL})
+    end
+
+    # only for idempotence of test, NOT use for jobnet command
+    def reset
+      @jobexecution_dao.delete('je.job_execution_id': @queue.map(&:job_execution_id))
+      @job_dao.delete(job_id: @jobs.map(&:id))
+      @jobnet_dao.delete(jobnet_id: @jobnet.id)
     end
   end
 

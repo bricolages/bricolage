@@ -58,7 +58,7 @@ module Bricolage
       end
 
       if opts.clear_queue?
-        clear_queue(opts)
+        clear_queue(opts, jobnet)
         exit EXIT_SUCCESS
       end
       queue = get_queue(opts, jobnet)
@@ -94,9 +94,10 @@ module Bricolage
       @ctx.logger
     end
 
-    def clear_queue(opts)
+    def clear_queue(opts, jobnet)
       if opts.db_name
-        opts ## TODO
+        datasource = @ctx.get_data_source('psql', opts.db_name)
+        DatabaseTaskQueue.clear_queue(datasource, jobnet)
       elsif path = get_queue_file_path(opts)
         FileUtils.rm_f path
       end

@@ -104,6 +104,13 @@ module Bricolage
         end
       end
 
+      def delete(**args)
+        where_clause = compile_where_expr(args)
+        @datasource.open_shared_connection do |conn|
+          conn.query_rows("delete from jobs where #{where_clause};")
+        end
+      end
+
       def check_lock(job_ids)
         records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
