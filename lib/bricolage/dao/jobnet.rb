@@ -100,6 +100,13 @@ module Bricolage
         end
       end
 
+      def delete(**args)
+        where_clause = compile_where_expr(args)
+        @datasource.open_shared_connection do |conn|
+          conn.query_rows("delete from jobnets where #{where_clause};")
+        end
+      end
+
       def check_lock(jobnet_id)
         record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
