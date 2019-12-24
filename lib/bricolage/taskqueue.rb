@@ -228,8 +228,7 @@ module Bricolage
     end
 
     def restore
-      job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
-                                               job_name: @jobs.map(&:job_name),
+      job_executions = @jobexecution_dao.where('jn.subsystem': @jobnet.subsystem,
                                                jobnet_name: @jobnet.jobnet_name,
                                                status: [Bricolage::DAO::JobExecution::STATUS_WAIT,
                                                         Bricolage::DAO::JobExecution::STATUS_RUN,
