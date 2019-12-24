@@ -142,10 +142,11 @@ module Bricolage
 
   class DatabaseTaskQueue < TaskQueue
 
-    def DatabaseTaskQueue.restore_if_exist(datasource, root_jobnet_ref, executor_id)
-      job_refs = root_jobnet_ref.sequential_jobs
+    def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, executor_id)
+      jobnet_subsys, jobnet_name = jobnet_ref.start_jobnet.name.delete('*').split('/')
+      job_refs = jobnet_ref.sequential_jobs
 
-      q = new(datasource, root_jobnet_ref, job_refs, executor_id)
+      q = new(datasource, jobnet_subsys, jobnet_name, job_refs, executor_id)
 
       return q if q.locked?
 
@@ -162,7 +163,7 @@ module Bricolage
       q.clear
     end
 
-    def initialize(datasource, root_jobnet_ref, job_refs, executor_id)
+    def initialize(datasource, subsys, jobnet_name, job_refs, executor_id)
       super()
       @ds = datasource
       @jobnet_dao = Bricolage::DAO::JobNet.new(@ds)
@@ -170,24 +171,8 @@ module Bricolage
       @jobexecution_dao = Bricolage::DAO::JobExecution.new(@ds)
 
       @executor_id = executor_id
-      @root_jobnet_ref = root_jobnet_ref
-      @root_jobnet = nil
-      @jobs = []
-      @jobnets = []
-
-      root_jobnet_ref.jobnets.each do |jobnet_ref|
-        subsys = jobnet_ref.ref.subsystem.to_s
-        jobnet_name = jobnet_ref.ref.name.to_s
-        jobnet = @jobnet_dao.find_or_create(subsys, jobnet_name)
-        @jobnets << jobnet
-        @root_jobnet = jobnet if @root_jobnet_ref.id == "#{jobnet.subsystem}/#{jobnet.jobnet_name}"
-
-        job_refs = jobnet_ref.refs - [jobnet_ref.start, *jobnet_ref.net_refs, jobnet_ref.end]
-        jobs = job_refs.map do |job_ref|
-          @job_dao.find_or_create(job_ref.subsystem.to_s, job_ref.name, jobnet.id)
-        end
-        @jobs.concat(jobs)
-      end
+      @jobnet = @jobnet_dao.find_or_create(subsys, jobnet_name)
+      @jobs = job_refs.map {|jobref| @job_dao.find_or_create(jobref.subsystem.to_s, jobref.name, @jobnet.id) }
     end
 
     def consume_each
@@ -245,7 +230,7 @@ module Bricolage
     def restore
       job_executions = @jobexecution_dao.where('j.subsystem': @jobs.map(&:subsystem).uniq,
                                                job_name: @jobs.map(&:job_name),
-                                               jobnet_name: @jobnets.map(&:jobnet_name).uniq,
+                                               jobnet_name: @jobnet.jobnet_name,
                                                status: [Bricolage::DAO::JobExecution::STATUS_WAIT,
                                                         Bricolage::DAO::JobExecution::STATUS_RUN,
                                                         Bricolage::DAO::JobExecution::STATUS_FAILURE])
@@ -262,7 +247,7 @@ module Bricolage
     end
 
     def locked?
-      jobnet_lock = @jobnet_dao.check_lock(@root_jobnet.id)
+      jobnet_lock = @jobnet_dao.check_lock(@jobnet.id)
       jobs_lock = @job_dao.check_lock(@jobs.map(&:id))
       jobnet_lock || jobs_lock
     end
@@ -275,9 +260,9 @@ module Bricolage
     end
 
     def lock_jobnet
-      lock_results = @jobnet_dao.update(where: {jobnet_id: @root_jobnet.id, executor_id: nil},
+      lock_results = @jobnet_dao.update(where: {jobnet_id: @jobnet.id, executor_id: nil},
                                         set:   {executor_id: @executor_id})
-      raise DoubleLockError, "Already locked id:#{@root_jobnet.id} jobnet" if lock_results.empty?
+      raise DoubleLockError, "Already locked id:#{@jobnet.id} jobnet" if lock_results.empty?
     end
 
     def unlock_job(task)
@@ -286,12 +271,12 @@ module Bricolage
     end
 
     def unlock_jobnet
-      @jobnet_dao.update(where: {jobnet_id: @root_jobnet.id},
+      @jobnet_dao.update(where: {jobnet_id: @jobnet.id},
                          set:   {executor_id: nil})
     end
 
     def locked_jobs
-      @job_dao.where(jobnet_id: @jobnets.map(&:id)).reject {|job| job.executor_id.nil? }
+      @job_dao.where(jobnet_id: @jobnet.id).reject {|job| job.executor_id.nil? }
     end
 
     def unlock_help
@@ -307,7 +292,7 @@ module Bricolage
     def reset
       @jobexecution_dao.delete('je.job_execution_id': @queue.map(&:job_execution_id))
       @job_dao.delete(job_id: @jobs.map(&:id))
-      @jobnet_dao.delete(jobnet_id: @jobnets.map(&:id))
+      @jobnet_dao.delete(jobnet_id: @jobnet.id)
     end
   end
 
