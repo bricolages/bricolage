@@ -74,7 +74,7 @@ module Bricolage
     end
 
     test "#enqueue/#dequeuing/#dequeued" do
-      queue = DatabaseTaskQueue.new(datasource, 'subsys', 'net1', jobrefs, 'dummy_executor')
+      queue = DatabaseTaskQueue.new(datasource, jobnet_ref, jobrefs, 'dummy_executor')
 
       assert_equal 0, queue.size
       queue.enqueue_job_executions
