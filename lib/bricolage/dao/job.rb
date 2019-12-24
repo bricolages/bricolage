@@ -93,7 +93,9 @@ module Bricolage
         where_clause = compile_where_expr(where)
         records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
-            update jobs set #{set_clause} where #{where_clause} returning *;
+            update jobs set #{set_clause} where #{where_clause}
+                returning "job_id", "subsystem", "job_name", jobnet_id, "executor_id"
+            ;
           SQL
         end
 
