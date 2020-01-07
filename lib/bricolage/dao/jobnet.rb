@@ -65,7 +65,10 @@ module Bricolage
         records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
             select
-                *
+                jobnet_id
+                , "subsystem"
+                , jobnet_name
+                , executor_id
             from
                 jobnets
             where

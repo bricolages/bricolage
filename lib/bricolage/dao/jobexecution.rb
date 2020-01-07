@@ -11,7 +11,7 @@ module Bricolage
       STATUS_CANCEL = 'canceled'.freeze
 
       Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :status, :message,
-                              :submitted_at, :lock,:started_at, :finished_at, :source,
+                              :submitted_at, :started_at, :finished_at, :source,
                               :job_name, :jobnet_name, :executor_id, :subsystem,
                               keyword_init: true)
 
@@ -33,10 +33,12 @@ module Bricolage
           conn.query_row(<<~SQL)
             insert into job_executions ("job_id", status)
                 values (#{job_id}, #{s(status)})
-                returning *
+                returning job_execution_id, status, message, job_id, source,
+                          submitted_at, started_at, finished_at
             ;
           SQL
         end
+
         job_execution = JobExecution.for_record(record)
         JobExecutionState.job_executions_change(@datasource, [job_execution])
         job_execution
@@ -48,7 +50,19 @@ module Bricolage
         records = @datasource.open_shared_connection do |conn|
           conn.query_rows(<<~SQL)
             select
-                *
+                job_execution_id
+                , jn.jobnet_id
+                , jn.jobnet_name
+                , j.job_id
+                , j.job_name
+                , j.executor_id as executor_id
+                , j.subsystem as subsystem
+                , status
+                , message
+                , source
+                , submitted_at
+                , started_at
+                , finished_at
             from
                 job_executions je
                 join jobs j using(job_id)
@@ -81,7 +95,9 @@ module Bricolage
             where
                 je.job_id = j.job_id
                 and #{where_clause}
-            returning *
+            returning job_execution_id, jn.jobnet_id, jn.jobnet_name, j.job_id, j.job_name,
+                      j.executor_id as executor_id, j.subsystem as subsystem,
+                      status, message, source, submitted_at, started_at, finished_at
             ;
           SQL
         end
