@@ -233,7 +233,7 @@ module Bricolage
                                                status: [Bricolage::DAO::JobExecution::STATUS_WAIT,
                                                         Bricolage::DAO::JobExecution::STATUS_RUN,
                                                         Bricolage::DAO::JobExecution::STATUS_FAILURE])
-      job_executions.sort_by(&:position).each { |je| enqueue(je) }
+      job_executions.sort_by(&:execution_sequence).each { |je| enqueue(je) }
     end
 
     def enqueue_job_executions
