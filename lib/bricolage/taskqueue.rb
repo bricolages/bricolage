@@ -233,12 +233,12 @@ module Bricolage
                                                status: [Bricolage::DAO::JobExecution::STATUS_WAIT,
                                                         Bricolage::DAO::JobExecution::STATUS_RUN,
                                                         Bricolage::DAO::JobExecution::STATUS_FAILURE])
-      job_executions.sort_by(&:job_execution_id).each { |je| enqueue(je) }
+      job_executions.sort_by(&:position).each { |je| enqueue(je) }
     end
 
     def enqueue_job_executions
-      @jobs.each do |job|
-        job_execution = @jobexecution_dao.create(job.id, Bricolage::DAO::JobExecution::STATUS_WAIT)
+      @jobs.each_with_index do |job, index|
+        job_execution = @jobexecution_dao.create(job.id, index, Bricolage::DAO::JobExecution::STATUS_WAIT)
         job_execution.job_name = job.job_name
         job_execution.subsystem = job.subsystem
         @queue.push JobExecutionTask.for_job_execution(job_execution)

@@ -10,9 +10,9 @@ module Bricolage
       STATUS_FAILURE = 'failed'.freeze
       STATUS_CANCEL = 'canceled'.freeze
 
-      Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :status, :message,
-                              :submitted_at, :started_at, :finished_at, :source,
-                              :job_name, :jobnet_name, :executor_id, :subsystem,
+      Attributes = Struct.new(:jobnet_id, :job_id, :job_execution_id, :position,
+                              :status, :message, :submitted_at, :started_at, :finished_at,
+                              :source, :job_name, :jobnet_name, :executor_id, :subsystem,
                               keyword_init: true)
 
       def JobExecution.for_record(job_execution)
@@ -28,12 +28,12 @@ module Bricolage
         @datasource = datasource
       end
 
-      def create(job_id, status)
+      def create(job_id, position, status)
         record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
-            insert into job_executions ("job_id", status)
-                values (#{job_id}, #{s(status)})
-                returning job_execution_id, status, message, job_id, source,
+            insert into job_executions ("job_id", position, status)
+                values (#{job_id}, #{position}, #{s(status)})
+                returning job_execution_id, position, status, message, job_id, source,
                           submitted_at, started_at, finished_at
             ;
           SQL
@@ -57,6 +57,7 @@ module Bricolage
                 , j.job_name
                 , j.executor_id as executor_id
                 , j.subsystem as subsystem
+                , position
                 , status
                 , message
                 , source
@@ -96,7 +97,7 @@ module Bricolage
                 je.job_id = j.job_id
                 and #{where_clause}
             returning job_execution_id, jn.jobnet_id, jn.jobnet_name, j.job_id, j.job_name,
-                      j.executor_id as executor_id, j.subsystem as subsystem,
+                      j.executor_id as executor_id, j.subsystem as subsystem, position,
                       status, message, source, submitted_at, started_at, finished_at
             ;
           SQL

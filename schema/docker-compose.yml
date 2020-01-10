@@ -1,0 +1,19 @@
+# vi: set ft=yaml :
+
+version: '3'
+services:
+  bricolage:
+    build:
+      context: ..
+      dockerfile: Dockerfile.schema
+    depends_on:
+      - "db"
+    environment:
+      PGHOST: "db"
+      PGDATABASE: "bricolage"
+      PGUSER: "bricolage"
+      PGPASSWORD: "bricolage"
+  db:
+    image: "postgres:11.4"
+    ports:
+      - "35432:5432"
