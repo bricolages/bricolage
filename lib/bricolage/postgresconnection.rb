@@ -87,7 +87,7 @@ module Bricolage
     private :querying
 
     def execute_update(query)
-      log_query query
+      log_query query, @ds.update_sql_log_level
       rs = log_elapsed_time {
         querying {
           @connection.async_exec(query)
@@ -128,7 +128,7 @@ module Bricolage
     end
 
     def execute_query(query, &block)
-      log_query query
+      log_query query, @ds.query_sql_log_level
       rs = log_elapsed_time {
         querying {
           @connection.async_exec(query)
@@ -262,8 +262,8 @@ module Bricolage
       execute("lock #{table}")
     end
 
-    def log_query(query)
-      @logger.log(@ds.sql_log_level) { "[#{@ds.name}] #{mask_secrets query}" }
+    def log_query(query, log_level = @ds.sql_log_level)
+      @logger.log(log_level) { "[#{@ds.name}] #{mask_secrets query}" }
     end
 
     def mask_secrets(msg)
