@@ -137,7 +137,7 @@ module Bricolage
 
     attr_reader :name
     attr_reader :context
-    attr_reader :logger
+    attr_accessor :logger
 
     def open
       yield nil

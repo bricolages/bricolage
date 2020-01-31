@@ -27,6 +27,8 @@ module Bricolage
         encoding: nil,
         psql: 'psql',
         sql_log_level: Logger::INFO,
+        query_sql_log_level: nil,
+        update_sql_log_level: nil,
         tmpdir: Dir.tmpdir)
       @host = host
       @port = port
@@ -37,6 +39,8 @@ module Bricolage
       @encoding = encoding
       @psql = psql
       @sql_log_level = Logger.intern_severity(sql_log_level)
+      @query_sql_log_level = Logger.intern_severity(query_sql_log_level || sql_log_level)
+      @update_sql_log_level = Logger.intern_severity(update_sql_log_level || sql_log_level)
       @tmpdir = tmpdir
       @connection_pool = []
       raise ParameterError, "missing psql host" unless @host
@@ -54,6 +58,8 @@ module Bricolage
     attr_reader :user
 
     attr_reader :sql_log_level
+    attr_reader :query_sql_log_level
+    attr_reader :update_sql_log_level
 
     def new_task
       PSQLTask.new(self)
