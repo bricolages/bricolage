@@ -26,7 +26,7 @@ module Bricolage
         pgpass: nil,
         encoding: nil,
         psql: 'psql',
-        sql_log_level: Logger::INFO,
+        sql_log_level: nil,
         query_sql_log_level: nil,
         update_sql_log_level: nil,
         tmpdir: Dir.tmpdir)
@@ -38,9 +38,9 @@ module Bricolage
       @pgpass = pgpass
       @encoding = encoding
       @psql = psql
-      @sql_log_level = Logger.intern_severity(sql_log_level)
-      @query_sql_log_level = Logger.intern_severity(query_sql_log_level || sql_log_level)
-      @update_sql_log_level = Logger.intern_severity(update_sql_log_level || sql_log_level)
+      @sql_log_level = Logger.intern_severity(sql_log_level || Logger::DEBUG)
+      @query_sql_log_level = Logger.intern_severity(query_sql_log_level || sql_log_level || Logger::DEBUG)
+      @update_sql_log_level = Logger.intern_severity(update_sql_log_level || sql_log_level || Logger::INFO)
       @tmpdir = tmpdir
       @connection_pool = []
       raise ParameterError, "missing psql host" unless @host
