@@ -1,3 +1,5 @@
+require 'fileutils'
+
 module Bricolage
   class LogLocator
     def LogLocator.empty
@@ -63,8 +65,25 @@ module Bricolage
       puts "bricolage: S3 log: #{s3_url}"
       begin
         @s3_writer.upload(path)
+        # tmp: Removes local file if S3 upload is succeeded.
+        # It seems leaving local files causes unexpected Docker failure, I try to remove this.
+        FileUtils.rm_f(path)
+        cleanup_local_dirs(File.dirname(path))
       rescue => ex
         puts "warning: S3 upload failed: #{s3_url}"
+      end
+    end
+
+    # Removes empty directories recursively
+    def cleanup_local_dirs(path)
+      dir_path = path
+      until dir_path == '/'
+        begin
+          Dir.rmdir(dir_path)
+        rescue Errno::ENOTEMPTY
+          break
+        end
+        dir_path = File.dirname(dir_path)
       end
     end
   end
