@@ -70,21 +70,19 @@ module Bricolage
         FileUtils.rm_f(path)
         cleanup_local_dirs(File.dirname(path))
       rescue => ex
-        puts "warning: S3 upload failed: #{s3_url}"
+        $stderr.puts "warning: S3 upload failed: #{ex.class} #{ex.message}: #{s3_url}"
       end
     end
 
     # Removes empty directories recursively
     def cleanup_local_dirs(path)
       dir_path = path
-      until dir_path == '/'
-        begin
-          Dir.rmdir(dir_path)
-        rescue Errno::ENOTEMPTY
-          break
-        end
+      until dir_path == '/' or dir_path == '.'
+        Dir.rmdir(dir_path)
         dir_path = File.dirname(dir_path)
       end
+    rescue SystemCallError
+      return   # ignore
     end
   end
 end
