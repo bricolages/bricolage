@@ -1,5 +1,5 @@
 /*
-    class: sql
+class: adhoc
 */
 
 select 1;
