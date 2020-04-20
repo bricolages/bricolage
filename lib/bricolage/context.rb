@@ -40,11 +40,16 @@ module Bricolage
     private_class_method :load
 
     def initialize(fs, env, option_variables: nil, data_sources: nil, logger: nil)
-      @logger = logger || Logger.default
+      @logger = logger || default_logger(env)
       @filesystem = fs
       @environment = env
       @option_variables = option_variables || Variables.new
       @data_sources = data_sources
+    end
+
+    private def default_logger(env)
+      level = (env == 'development') ? Logger::DEBUG : Logger::INFO
+      Logger.new(device: $stderr, level: level)
     end
 
     def load_configurations

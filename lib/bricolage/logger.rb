@@ -22,14 +22,7 @@ module Bricolage
 
     def Logger.new(device: $stderr, level: nil, rotation_period: nil, rotation_size: DEFAULT_ROTATION_SIZE)
       logger = super(device, (rotation_period || 0), rotation_size)
-      logger.level =
-        if level
-          level
-        elsif device == $stderr && $stderr.tty?
-          Logger::DEBUG
-        else
-          Logger::INFO
-        end
+      logger.level = level || Logger::INFO
       logger.formatter = -> (sev, time, prog, msg) {
         "#{time}: #{sev}: #{msg}\n"
       }
