@@ -212,7 +212,7 @@ class StreamingLoadJobClass < RubyJobClass
         end
       @logger.info "creating manifest: #{manifest_name}"
       json = make_manifest_json(objects)
-      @logger.info "manifest:\n" + json
+      @logger.debug "manifest:\n" + json
       url = @src.put_control_file(manifest_name, json, noop: @noop)
       yield url
       @src.remove_control_file(File.basename(url), noop: @noop) unless @keep_ctl
@@ -241,7 +241,7 @@ class StreamingLoadJobClass < RubyJobClass
       log_name = "load_log-#{@job_process_id}.csv"
       @logger.info "creating tmp load log: #{log_name}"
       csv = make_load_log_csv(objects)
-      @logger.info "load_log:\n" + csv
+      @logger.debug "load_log:\n" + csv
       url = @src.put_control_file(log_name, csv, noop: @noop)
       begin
         yield url
