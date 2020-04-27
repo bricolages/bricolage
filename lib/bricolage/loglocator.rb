@@ -65,8 +65,9 @@ module Bricolage
       puts "bricolage: S3 log: #{s3_url}"
       begin
         @s3_writer.upload(path)
-        # tmp: Removes local file if S3 upload is succeeded.
+        # tmp: Prints & removes local file if S3 upload is succeeded.
         # It seems leaving local files causes unexpected Docker failure, I try to remove this.
+        puts File.read(path)
         FileUtils.rm_f(path)
         cleanup_local_dirs(File.dirname(path))
       rescue => ex
