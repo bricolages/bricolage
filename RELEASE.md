@@ -1,5 +1,11 @@
 # Bricolage Release Note
 
+## version 6.0.0
+
+- [new] taskqueue supports to use PotgresSQL DB.
+- [new] add retry for postgresql connection.
+- [new] change priority of variable from command -v option.
+
 ## version 5.30.0
 
 - [new] streaming_load: new option --ctl-ds to change S3 data source for metadata files.
