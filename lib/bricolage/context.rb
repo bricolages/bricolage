@@ -48,8 +48,7 @@ module Bricolage
     end
 
     private def default_logger(env)
-      level = (env == 'development') ? Logger::DEBUG : Logger::INFO
-      Logger.new(device: $stderr, level: level)
+      Logger.new(device: $stderr, level: Logger::INFO)
     end
 
     def load_configurations
