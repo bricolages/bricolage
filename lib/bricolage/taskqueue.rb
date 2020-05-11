@@ -254,6 +254,8 @@ module Bricolage
     end
 
     def lock_job(task)
+      return   # FIXME: tmp
+
       raise "Invalid job_id" if task.job_id.nil?
       lock_results = @job_dao.update(where: {job_id: task.job_id, executor_id: nil},
                                      set:   {executor_id: @executor_id})
@@ -261,17 +263,23 @@ module Bricolage
     end
 
     def lock_jobnet
+      return   # FIXME: tmp
+
       lock_results = @jobnet_dao.update(where: {jobnet_id: @jobnet.id, executor_id: nil},
                                         set:   {executor_id: @executor_id})
       raise DoubleLockError, "Already locked id:#{@jobnet.id} jobnet" if lock_results.empty?
     end
 
     def unlock_job(task)
+      return   # FIXME: tmp
+
       @job_dao.update(where: {job_id: task.job_id},
                       set:   {executor_id: nil})
     end
 
     def unlock_jobnet
+      return   # FIXME: tmp
+
       @jobnet_dao.update(where: {jobnet_id: @jobnet.id},
                          set:   {executor_id: nil})
     end
