@@ -113,7 +113,7 @@ module Bricolage
         logger.info "queue path: #{path}"
         FileTaskQueue.restore_if_exist(path)
       else
-        TaskQueue.new
+        MemoryTaskQueue.new
       end
     end
 
