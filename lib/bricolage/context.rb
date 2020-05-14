@@ -134,8 +134,11 @@ module Bricolage
 
     def load_variables(path)
       Variables.define {|vars|
-        @filesystem.config_file_loader.load_yaml(path).each do |name, value|
-          vars[name] = value
+        kvs = @filesystem.config_file_loader.load_yaml(path)
+        if kvs
+          kvs.each do |name, value|
+            vars[name] = value
+          end
         end
       }
     end
