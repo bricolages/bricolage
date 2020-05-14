@@ -57,16 +57,18 @@ module Bricolage
         exit EXIT_SUCCESS
       end
 
+      queue = make_queue(opts)
+      if queue.locked?(jobnet)
+        raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help(jobnet)}"
+      end
       if opts.clear_queue?
-        clear_queue(opts, jobnet)
+        queue.cancel_jobnet(jobnet, 'cancelled by --clear-queue')
+        logger.info "queue is unlocked and cleared"
         exit EXIT_SUCCESS
       end
-      queue = get_queue(opts, jobnet)
-      if queue.locked?
-        raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
-      end
-      unless queue.queued?
-        enqueue_jobs jobnet, queue
+      queue.restore_jobnet(jobnet)
+      if queue.empty?
+        queue.enqueue_jobnet(jobnet)
       end
 
       if opts.list_jobs?
@@ -94,24 +96,15 @@ module Bricolage
       @ctx.logger
     end
 
-    def clear_queue(opts, jobnet)
+    def make_queue(opts)
       if opts.db_name
-        datasource = @ctx.get_data_source('psql', opts.db_name)
-        DatabaseTaskQueue.clear_queue(datasource, jobnet)
-      elsif path = get_queue_file_path(opts)
-        FileUtils.rm_f path
-      end
-    end
-
-    def get_queue(opts, jobnet)
-      if opts.db_name
+        logger.info "Enables DB queue: datasource=#{opts.db_name}"
         datasource = @ctx.get_data_source('psql', opts.db_name)
         executor_id = get_executor_id(opts.executor_type)
-        logger.info "DB connect: #{opts.db_name}"
-        DatabaseTaskQueue.restore_if_exist(datasource, jobnet, executor_id)
+        DatabaseTaskQueue.new(datasource: datasource, executor_id: executor_id)
       elsif path = get_queue_file_path(opts)
-        logger.info "queue path: #{path}"
-        FileTaskQueue.restore_if_exist(path)
+        logger.info "Enables file queue: #{path}"
+        FileTaskQueue.new(path: path)
       else
         MemoryTaskQueue.new
       end
@@ -146,15 +139,6 @@ module Bricolage
         path = path.dirname
       end
       path.basename.to_s
-    end
-
-    def enqueue_jobs(jobnet, queue)
-      seq = 1
-      jobnet.sequential_jobs.each do |ref|
-        queue.enqueue JobTask.new(ref)
-        seq += 1
-      end
-      queue.save
     end
 
     def list_jobs(queue)

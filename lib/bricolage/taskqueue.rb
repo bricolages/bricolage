@@ -24,10 +24,6 @@ module Bricolage
       @queue.size
     end
 
-    def queued?
-      not empty?
-    end
-
     def each(&block)
       @queue.each(&block)
     end
@@ -40,16 +36,25 @@ module Bricolage
       end
     end
 
-    def enqueue(task)
-      @queue.push task
+    def restore_jobnet(jobnet)
     end
 
-    def locked?
+    def enqueue_jobnet(jobnet)
+      jobnet.sequential_jobs.each do |job|
+        @queue.push job
+      end
+    end
+
+    def locked?(jobnet)
       false
     end
 
-    def unlock_help
+    def unlock_help(jobnet)
       raise "[BUG] this message must not be shown"
+    end
+
+    def cancel_jobnet(jobnet, message)
+      @queue.clear
     end
 
   end
@@ -57,13 +62,7 @@ module Bricolage
 
   class FileTaskQueue
 
-    def FileTaskQueue.restore_if_exist(path)
-      q = new(path)
-      q.restore if q.queued?
-      q
-    end
-
-    def initialize(path)
+    def initialize(path:)
       @path = path
       @queue = []
     end
@@ -76,8 +75,17 @@ module Bricolage
       @queue.size
     end
 
-    def queued?
-      @path.exist?
+    def restore_jobnet(jobnet)
+      return unless File.exist?(@path)
+      File.foreach(@path) do |line|
+        @queue.push Task.deserialize(line)
+      end
+    end
+
+    def enqueue_jobnet(jobnet)
+      jobnet.sequential_jobs.each do |ref|
+        @queue.push Task.new(ref)
+      end
     end
 
     def each
@@ -99,7 +107,7 @@ module Bricolage
       unlock
     end
 
-    def save
+    private def save
       if empty?
         @path.unlink if @path.exist?
         return
@@ -118,13 +126,7 @@ module Bricolage
       end
     end
 
-    def restore
-      File.foreach(@path) do |line|
-        enqueue JobTask.deserialize(line)
-      end
-    end
-
-    def locked?
+    def locked?(jobnet)
       lock_file_path.exist?
     end
 
@@ -140,8 +142,14 @@ module Bricolage
       Pathname.new("#{@path}.LOCK")
     end
 
-    def unlock_help
+    def unlock_help(jobnet)
       "remove the file: #{lock_file_path}"
+    end
+
+    def cancel_jobnet(jobnet, message)
+      unlock
+      FileUtils.rm_f(@path)
+      @queue.clear
     end
 
   end
@@ -149,28 +157,7 @@ module Bricolage
 
   class DatabaseTaskQueue
 
-    def DatabaseTaskQueue.restore_if_exist(datasource, jobnet_ref, executor_id)
-      jobnet_subsys, jobnet_name = jobnet_ref.start_jobnet.name.delete('*').split('/')
-      job_refs = jobnet_ref.sequential_jobs
-
-      q = new(datasource, jobnet_subsys, jobnet_name, job_refs, executor_id)
-
-      return q if q.locked?
-
-      q.restore
-      q.enqueue_job_executions unless q.queued?
-      q
-    end
-
-    def DatabaseTaskQueue.clear_queue(datasource, jobnet_ref)
-      jobnet_subsys, jobnet_name = jobnet_ref.start_jobnet.name.delete('*').split('/')
-      job_refs = jobnet_ref.sequential_jobs
-
-      q = new(datasource, jobnet_subsys, jobnet_name, job_refs, nil)
-      q.clear
-    end
-
-    def initialize(datasource, subsys, jobnet_name, job_refs, executor_id)
+    def initialize(datasource:, executor_id:)
       @ds = datasource
       @executor_id = executor_id
 
@@ -178,10 +165,7 @@ module Bricolage
       @jobnet_dao = Bricolage::DAO::JobNet.new(@ds)
       @job_dao = Bricolage::DAO::Job.new(@ds)
       @jobexecution_dao = Bricolage::DAO::JobExecution.new(@ds)
-
-      @jobnet_obj = jobnet
-      @jobnet = find_jobnet(jobnet)
-      @jobs = job_refs.map {|jobref| @job_dao.find_or_create(jobref.subsystem.to_s, jobref.name, @jobnet.id) }
+      @jobnet = nil
     end
 
     def empty?
@@ -193,7 +177,42 @@ module Bricolage
     end
 
     private def find_jobnet(jobnet)
-      @jobnet_dao.find_or_create(jobnet.ref)
+      @jobnet_rec ||= @jobnet_dao.find_or_create(jobnet.ref)
+    end
+
+    def restore_jobnet(jobnet)
+      raise "jobnet is already bound to queue" if @jobnet
+
+      jobnet = find_jobnet(jobnet)
+      job_executions = @jobexecution_dao.where(
+        'jn.subsystem': jobnet.subsystem,
+        'jn.jobnet_name': jobnet.jobnet_name,
+        status: [
+          Bricolage::DAO::JobExecution::STATUS_WAIT,
+          Bricolage::DAO::JobExecution::STATUS_RUN,
+          Bricolage::DAO::JobExecution::STATUS_FAILURE
+        ]
+      )
+      unless job_executions.empty?
+        job_executions.sort_by {|je| je.execution_sequence.to_i }.each do |exec|
+          @queue.push Task.for_job_execution(exec)
+        end
+        @jobnet = jobnet
+      end
+    end
+
+    def enqueue_jobnet(jobnet)
+      raise "jobnet is already bound to queue" if @jobnet
+
+      jobnet_rec = find_jobnet(jobnet)
+      jobnet.sequential_jobs.each_with_index do |job_ref, index|
+        job = @job_dao.find_or_create(job_ref.subsystem, job_ref.name, jobnet_rec.id)
+        job_execution = @jobexecution_dao.create(job.id, index + 1, Bricolage::DAO::JobExecution::STATUS_WAIT)
+        job_execution.job_name = job.job_name
+        job_execution.subsystem = job.subsystem
+        @queue.push Task.for_job_execution(job_execution)
+      end
+      @jobnet = jobnet
     end
 
     def each
@@ -203,8 +222,9 @@ module Bricolage
     end
 
     def consume_each
-      lock_jobnet
+      raise "jobnet is not bound to queue" unless @jobnet
 
+      lock_jobnet(@jobnet)
       while task = @queue.first
         lock_job(task)
         begin
@@ -238,45 +258,16 @@ module Bricolage
         end
       end
     ensure
-      unlock_jobnet
+      unlock_jobnet(@jobnet)
     end
 
-    def enqueue(job_execution)
-      job_execution_id = job_execution.job_execution_id
-      @jobexecution_dao.update(where: {job_execution_id: job_execution_id},
-                               set:   {status: Bricolage::DAO::JobExecution::STATUS_WAIT,
-                                       message: nil, submitted_at: :now, started_at: nil, finished_at: nil})
-      @queue.push JobExecutionTask.for_job_execution(job_execution)
+    def locked?(jobnet)
+      jobnet_rec = find_jobnet(jobnet)
+      @jobnet_dao.check_lock(jobnet_rec.id)
     end
 
-    def restore
-      job_executions = @jobexecution_dao.where('jn.subsystem': @jobnet.subsystem,
-                                               'jn.jobnet_name': @jobnet.jobnet_name,
-                                               status: [Bricolage::DAO::JobExecution::STATUS_WAIT,
-                                                        Bricolage::DAO::JobExecution::STATUS_RUN,
-                                                        Bricolage::DAO::JobExecution::STATUS_FAILURE])
-      job_executions
-        .sort_by { |je| je.execution_sequence.to_i }
-        .each { |je| enqueue(je) }
-    end
-
-    def enqueue_job_executions
-      @jobs.each_with_index do |job, index|
-        job_execution = @jobexecution_dao.create(job.id, index, Bricolage::DAO::JobExecution::STATUS_WAIT)
-        job_execution.job_name = job.job_name
-        job_execution.subsystem = job.subsystem
-        @queue.push JobExecutionTask.for_job_execution(job_execution)
-      end
-    end
-
-    def locked?
-      jobnet_lock = @jobnet_dao.check_lock(@jobnet.id)
-      jobs_lock = @job_dao.check_lock(@jobs.map(&:id))
-      jobnet_lock || jobs_lock
-    end
-
-    def unlock_help
-      jobnet_rec = find_jobnet(@jobnet_obj)
+    def unlock_help(jobnet)
+      jobnet_rec = find_jobnet(jobnet)
       @job_dao.where(jobnet_id: jobnet_rec.id).reject {|job| job.executor_id.nil? }
       "update the job_id records to unlock from job tables: #{locked_jobs.map(&:id)}"
     end
@@ -288,17 +279,18 @@ module Bricolage
       lock_results = @job_dao.update(where: {job_id: task.job_id, executor_id: nil},
                                      set:   {executor_id: @executor_id})
       if lock_results.empty?
-        raise DoubleLockError, "Already locked id:#{job_id} job"
+        raise DoubleLockError, "Already locked job: id=#{job_id}"
       end
     end
 
-    private def lock_jobnet
+    private def lock_jobnet(jobnet)
       return   # FIXME: tmp
 
-      lock_results = @jobnet_dao.update(where: {jobnet_id: @jobnet.id, executor_id: nil},
+      jobnet_rec = find_jobnet(jobnet)
+      lock_results = @jobnet_dao.update(where: {jobnet_id: jobnet_rec.id, executor_id: nil},
                                         set:   {executor_id: @executor_id})
       if lock_results.empty?
-        raise DoubleLockError, "Already locked id:#{@jobnet.id} jobnet"
+        raise DoubleLockError, "Already locked jobnet: id=#{jobnet_rec.id}"
       end
     end
 
@@ -309,16 +301,21 @@ module Bricolage
                       set:   {executor_id: nil})
     end
 
-    private def unlock_jobnet
+    private def unlock_jobnet(jobnet)
       return   # FIXME: tmp
 
-      @jobnet_dao.update(where: {jobnet_id: @jobnet.id},
-                         set:   {executor_id: nil})
+      jobnet_rec = find_jobnet(jobnet)
+      @jobnet_dao.update(where: {jobnet_id: jobnet_rec.id, executor_id: @executor_id},
+                         set: {executor_id: nil})
     end
 
-    def clear
-      @jobexecution_dao.update(where: {'je.job_id': @jobs.map(&:id)},
-                               set:   {status: Bricolage::DAO::JobExecution::STATUS_CANCEL})
+    def cancel_jobnet(jobnet, message)
+      @ds.open_shared_connection {|conn|
+        conn.transaction {
+          cancelled_execs = DAO::JobExecution.for_connection(conn).cancel_jobnet(jobnet.ref, message)
+          DAO::JobExecutionState.for_connection(conn).cancel_jobs(cancelled_execs, message)
+        }
+      }
     end
 
     # only for idempotence of test, NOT use for jobnet command

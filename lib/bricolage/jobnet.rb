@@ -51,6 +51,10 @@ module Bricolage
 
     attr_reader :start_jobnet
 
+    def ref
+      @start_jobnet.ref
+    end
+
     def each_jobnet(&block)
       @jobnets.each_value(&block)
     end
