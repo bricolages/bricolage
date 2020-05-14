@@ -101,7 +101,7 @@ module Bricolage
         logger.info "Enables DB queue: datasource=#{opts.db_name}"
         datasource = @ctx.get_data_source('psql', opts.db_name)
         executor_id = get_executor_id(opts.executor_type)
-        DatabaseTaskQueue.new(datasource: datasource, executor_id: executor_id)
+        DatabaseTaskQueue.new(datasource: datasource, executor_id: executor_id, enable_lock: false)
       elsif path = get_queue_file_path(opts)
         logger.info "Enables file queue: #{path}"
         FileTaskQueue.new(path: path)

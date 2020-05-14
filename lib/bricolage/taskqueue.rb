@@ -157,9 +157,10 @@ module Bricolage
 
   class DatabaseTaskQueue
 
-    def initialize(datasource:, executor_id:)
+    def initialize(datasource:, executor_id:, enable_lock: false)
       @ds = datasource
       @executor_id = executor_id
+      @enable_lock = enable_lock
 
       @queue = []
       @jobnet_dao = Bricolage::DAO::JobNet.new(@ds)
@@ -273,9 +274,9 @@ module Bricolage
     end
 
     private def lock_job(task)
-      return   # FIXME: tmp
-
       raise "Invalid job_id" if task.job_id.nil?
+      return unless @enable_lock
+
       lock_results = @job_dao.update(where: {job_id: task.job_id, executor_id: nil},
                                      set:   {executor_id: @executor_id})
       if lock_results.empty?
@@ -284,7 +285,7 @@ module Bricolage
     end
 
     private def lock_jobnet(jobnet)
-      return   # FIXME: tmp
+      return unless @enable_lock
 
       jobnet_rec = find_jobnet(jobnet)
       lock_results = @jobnet_dao.update(where: {jobnet_id: jobnet_rec.id, executor_id: nil},
@@ -295,14 +296,14 @@ module Bricolage
     end
 
     private def unlock_job(task)
-      return   # FIXME: tmp
+      return unless @enable_lock
 
       @job_dao.update(where: {job_id: task.job_id},
                       set:   {executor_id: nil})
     end
 
     private def unlock_jobnet(jobnet)
-      return   # FIXME: tmp
+      return unless @enable_lock
 
       jobnet_rec = find_jobnet(jobnet)
       @jobnet_dao.update(where: {jobnet_id: jobnet_rec.id, executor_id: @executor_id},
