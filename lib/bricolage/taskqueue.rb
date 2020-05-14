@@ -29,8 +29,8 @@ module Bricolage
     end
 
     def consume_each
-      while task = @queue.first
-        result = yield task
+      while job = @queue.first
+        result = yield job
         break unless result.success?
         @queue.shift
       end
@@ -90,7 +90,7 @@ module Bricolage
 
     def each
       @queue.each do |task|
-        yield task
+        yield task.job
       end
     end
 
@@ -98,7 +98,7 @@ module Bricolage
       lock
       save
       while task = @queue.first
-        task_result = yield task
+        task_result = yield task.job
         break unless task_result.success?
         @queue.shift
         save
@@ -150,6 +150,23 @@ module Bricolage
       unlock
       FileUtils.rm_f(@path)
       @queue.clear
+    end
+
+    class Task
+      def initialize(job)
+        @job = job
+      end
+
+      attr_reader :job
+
+      def serialize
+        [@job].join("\t")
+      end
+
+      def Task.deserialize(str)
+        job, * = str.strip.split("\t")
+        new(JobNet::Ref.parse(job))
+      end
     end
 
   end
@@ -218,7 +235,7 @@ module Bricolage
 
     def each
       @queue.each do |task|
-        yield task
+        yield task.job
       end
     end
 
@@ -325,44 +342,24 @@ module Bricolage
       @job_dao.delete(job_id: @jobs.map(&:id))
       @jobnet_dao.delete(jobnet_id: @jobnet.id)
     end
-  end
 
-  class JobTask
-    def initialize(job)
-      @job = job
+    class Task
+      def Task.for_job_execution(job_execution)
+        jobref = JobNet::JobRef.new(job_execution.subsystem, job_execution.job_name, JobNet::Location.dummy)
+        new(jobref, job_execution)
+      end
+
+      def initialize(job, job_execution)
+        @job = job
+        @job_id = job_execution.job_id
+        @job_execution_id = job_execution.job_execution_id
+      end
+
+      attr_reader :job
+      attr_reader :job_id
+      attr_reader :job_execution_id
     end
 
-    attr_reader :job
-
-    def serialize
-      [@job].join("\t")
-    end
-
-    def JobTask.deserialize(str)
-      job, * = str.strip.split("\t")
-      new(JobNet::Ref.parse(job))
-    end
-  end
-
-  class JobExecutionTask
-    def initialize(job, job_execution)
-      @job = job
-      @job_name = job.name
-      @subsystem = job.subsystem.to_s
-      @job_id = job_execution.job_id
-      @job_execution_id = job_execution.job_execution_id
-    end
-
-    attr_reader :job
-    attr_reader :job_name
-    attr_reader :subsystem
-    attr_reader :job_id
-    attr_reader :job_execution_id
-
-    def JobExecutionTask.for_job_execution(job_execution)
-      jobref = JobNet::JobRef.new(job_execution.subsystem, job_execution.job_name, JobNet::Location.dummy)
-      new(jobref, job_execution)
-    end
   end
 
 end

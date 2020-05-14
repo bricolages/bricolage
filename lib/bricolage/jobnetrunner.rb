@@ -142,24 +142,23 @@ module Bricolage
     end
 
     def list_jobs(queue)
-      queue.each do |task|
-        puts task.job
+      queue.each do |job|
+        puts job
       end
     end
 
     def check_jobs(queue)
-      queue.each do |task|
-        Job.load_ref(task.job, @ctx).compile
+      queue.each do |job|
+        Job.load_ref(job, @ctx).compile
       end
     end
 
     def run_queue(queue)
       result = nil
-      task_job = nil
+      job = nil
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
-      queue.consume_each do |task|
-        task_job = task.job
-        result = execute_job(task_job, queue)
+      queue.consume_each do |job|
+        result = execute_job(job, queue)
       end
       @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(result.success?, queue))
       logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
@@ -167,7 +166,7 @@ module Bricolage
       if result.success?
         logger.info "status all green"
       else
-        logger.error "[job #{task_job}] #{result.message}"
+        logger.error "[job #{job}] #{result.message}"
         exit result.status
       end
     end
