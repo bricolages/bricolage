@@ -34,6 +34,10 @@ module Bricolage
   # You should wait to unlock by another job execution or force to unlock manually.
   class DoubleLockError < JobFailure; end
 
+  # Unexpected job state transition tried.
+  # This error must be fixed by a operator.
+  class IllegalJobStateException < JobFailure; end
+
   # S3 related exceptions
   class S3Exception < JobFailureByException; end
 
