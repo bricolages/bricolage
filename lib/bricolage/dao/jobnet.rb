@@ -18,7 +18,7 @@ module Bricolage
         @datasource = datasource
       end
 
-      def find_by(subsystem, jobnet_name)
+      private def find_by(ref)
         record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
             select
@@ -29,8 +29,8 @@ module Bricolage
             from
                 jobnets
             where
-                "subsystem" = #{s(subsystem)}
-                and jobnet_name = #{s(jobnet_name)}
+                "subsystem" = #{s ref.subsystem}
+                and jobnet_name = #{s ref.name}
             ;
           SQL
         end
@@ -42,11 +42,11 @@ module Bricolage
         end
       end
 
-      def create(subsystem, jobnet_name)
+      private def create(ref)
         record = @datasource.open_shared_connection do |conn|
           conn.query_row(<<~SQL)
             insert into jobnets ("subsystem", jobnet_name)
-                values (#{s(subsystem)}, #{s(jobnet_name)})
+                values (#{s ref.subsystem}, #{s ref.name})
                 returning jobnet_id, "subsystem", jobnet_name
             ;
           SQL
@@ -55,8 +55,8 @@ module Bricolage
         JobNet.for_record(record)
       end
 
-      def find_or_create(subsystem, jobnet_name)
-        find_by(subsystem, jobnet_name) || create(subsystem, jobnet_name)
+      def find_or_create(ref)
+        find_by(ref) || create(ref)
       end
 
       def where(**args)

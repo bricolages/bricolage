@@ -51,6 +51,10 @@ module Bricolage
 
     attr_reader :start_jobnet
 
+    def ref
+      @start_jobnet.ref
+    end
+
     def each_jobnet(&block)
       @jobnets.each_value(&block)
     end
@@ -351,7 +355,7 @@ module Bricolage
         unless node_subsys
           raise ParameterError, "missing subsystem: #{ref}"
         end
-        ref_class.new(node_subsys, name, location)
+        ref_class.new(node_subsys.to_s, name.to_s, location)
       end
 
       def initialize(subsys, name, location)
@@ -389,7 +393,7 @@ module Bricolage
 
     class JobRef < Ref
       def JobRef.for_path(path)
-        new(path.parent.basename, JobRef.strip_exts(path), Location.dummy)
+        new(path.parent.basename.to_s, JobRef.strip_exts(path), Location.dummy)
       end
 
       def JobRef.strip_exts(path)
@@ -398,7 +402,7 @@ module Bricolage
         until (ext = basename.extname).empty?
           basename = basename.basename(ext)
         end
-        basename
+        basename.to_s
       end
 
       def net?
@@ -408,11 +412,11 @@ module Bricolage
 
     class JobNetRef < Ref
       def JobNetRef.for_path(path)
-        new(path.parent.basename, path.basename('.jobnet'), Location.dummy)
+        new(path.parent.basename.to_s, path.basename('.jobnet').to_s, Location.dummy)
       end
 
       def JobNetRef.for_job_path(path)
-        new(path.parent.basename, JobRef.strip_exts(path), Location.dummy)
+        new(path.parent.basename.to_s, JobRef.strip_exts(path).to_s, Location.dummy)
       end
 
       def initialize(subsys, name, location)
@@ -443,7 +447,6 @@ module Bricolage
       def end_ref
         @end ||= JobRef.new(subsystem, "@#{name}@end", location)
       end
-
 
       def start
         @jobnet.start

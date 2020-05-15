@@ -57,16 +57,18 @@ module Bricolage
         exit EXIT_SUCCESS
       end
 
+      queue = make_queue(opts)
+      if queue.locked?(jobnet)
+        raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help(jobnet)}"
+      end
       if opts.clear_queue?
-        clear_queue(opts, jobnet)
+        queue.cancel_jobnet(jobnet, 'cancelled by --clear-queue')
+        logger.info "queue is unlocked and cleared"
         exit EXIT_SUCCESS
       end
-      queue = get_queue(opts, jobnet)
-      if queue.locked?
-        raise ParameterError, "Job queue is still locked. If you are sure to restart jobnet, #{queue.unlock_help}"
-      end
-      unless queue.queued?
-        enqueue_jobs jobnet, queue
+      queue.restore_jobnet(jobnet)
+      if queue.empty?
+        queue.enqueue_jobnet(jobnet)
       end
 
       if opts.list_jobs?
@@ -94,26 +96,17 @@ module Bricolage
       @ctx.logger
     end
 
-    def clear_queue(opts, jobnet)
+    def make_queue(opts)
       if opts.db_name
-        datasource = @ctx.get_data_source('psql', opts.db_name)
-        DatabaseTaskQueue.clear_queue(datasource, jobnet)
-      elsif path = get_queue_file_path(opts)
-        FileUtils.rm_f path
-      end
-    end
-
-    def get_queue(opts, jobnet)
-      if opts.db_name
+        logger.info "Enables DB queue: datasource=#{opts.db_name}"
         datasource = @ctx.get_data_source('psql', opts.db_name)
         executor_id = get_executor_id(opts.executor_type)
-        logger.info "DB connect: #{opts.db_name}"
-        DatabaseTaskQueue.restore_if_exist(datasource, jobnet, executor_id)
+        DatabaseTaskQueue.new(datasource: datasource, executor_id: executor_id, enable_lock: false)
       elsif path = get_queue_file_path(opts)
-        logger.info "queue path: #{path}"
-        FileTaskQueue.restore_if_exist(path)
+        logger.info "Enables file queue: #{path}"
+        FileTaskQueue.new(path: path)
       else
-        TaskQueue.new
+        MemoryTaskQueue.new
       end
     end
 
@@ -148,34 +141,24 @@ module Bricolage
       path.basename.to_s
     end
 
-    def enqueue_jobs(jobnet, queue)
-      seq = 1
-      jobnet.sequential_jobs.each do |ref|
-        queue.enqueue JobTask.new(ref)
-        seq += 1
-      end
-      queue.save
-    end
-
     def list_jobs(queue)
-      queue.each do |task|
-        puts task.job
+      queue.each do |job|
+        puts job
       end
     end
 
     def check_jobs(queue)
-      queue.each do |task|
-        Job.load_ref(task.job, @ctx).compile
+      queue.each do |job|
+        Job.load_ref(job, @ctx).compile
       end
     end
 
     def run_queue(queue)
       result = nil
-      task_job = nil
+      job = nil
       @hooks.run_before_all_jobs_hooks(BeforeAllJobsEvent.new(@jobnet_id, queue))
-      queue.consume_each do |task|
-        task_job = task.job
-        result = execute_job(task_job, queue)
+      queue.consume_each do |job|
+        result = execute_job(job, queue)
       end
       @hooks.run_after_all_jobs_hooks(AfterAllJobsEvent.new(result.success?, queue))
       logger.elapsed_time 'jobnet total: ', (Time.now - @jobnet_start_time)
@@ -183,7 +166,7 @@ module Bricolage
       if result.success?
         logger.info "status all green"
       else
-        logger.error "[job #{task_job}] #{result.message}"
+        logger.error "[job #{job}] #{result.message}"
         exit result.status
       end
     end
