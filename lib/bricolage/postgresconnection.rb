@@ -97,6 +97,8 @@ module Bricolage
     rescue PG::ConnectionBad, PG::UnableToSend => ex
       @connection_failed = true
       raise ConnectionError.wrap(ex)
+    rescue PG::UniqueViolation => ex
+      raise UniqueViolationException.wrap(ex)
     rescue PG::Error => ex
       raise PostgreSQLException.wrap(ex)
     ensure

@@ -24,6 +24,9 @@ module Bricolage
   # Various SQL exception, except connection problem.
   class SQLException < JobFailureByException; end
 
+  # SQL unique constraint violation
+  class UniqueViolationException < SQLException; end
+
   # Database connection problems (not established, closed unexpectedly, invalid state)
   class ConnectionError < JobFailureByException; end
 

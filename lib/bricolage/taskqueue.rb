@@ -272,8 +272,7 @@ module Bricolage
     end
 
     def locked?(jobnet)
-      jobnet_rec = find_jobnet(jobnet)
-      @jobnet_dao.check_lock(jobnet_rec.id)
+      @jobnet_dao.locked?(jobnet.ref)
     end
 
     def unlock_help(jobnet)
@@ -297,11 +296,7 @@ module Bricolage
       return unless @enable_lock
 
       jobnet_rec = find_jobnet(jobnet)
-      lock_results = @jobnet_dao.update(where: {jobnet_id: jobnet_rec.id, executor_id: nil},
-                                        set:   {executor_id: @executor_id})
-      if lock_results.empty?
-        raise DoubleLockError, "Already locked jobnet: id=#{jobnet_rec.id}"
-      end
+      @jobnet_dao.lock(jobnet_rec.id, @executor_id)
     end
 
     private def unlock_job(task)
@@ -315,8 +310,7 @@ module Bricolage
       return unless @enable_lock
 
       jobnet_rec = find_jobnet(jobnet)
-      @jobnet_dao.update(where: {jobnet_id: jobnet_rec.id, executor_id: @executor_id},
-                         set: {executor_id: nil})
+      @jobnet_dao.unlock(jobnet_rec.id, @executor_id)
     end
 
     def cancel_jobnet(jobnet, message)
@@ -327,7 +321,7 @@ module Bricolage
     def reset
       @jobexecution_dao.delete_all(@queue.map(&:job_execution_id))
       @job_dao.delete(job_id: @jobs.map(&:id))
-      @jobnet_dao.delete(jobnet_id: @jobnet.id)
+      @jobnet_dao.delete(@jobnet_rec.id)
     end
 
     class Task
