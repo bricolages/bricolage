@@ -249,12 +249,13 @@ module Bricolage
 
             if task_result.success?
               @jobexecution_dao.transition_to_succeeded(task.job_execution_id)
+              job_completed = true
               @queue.shift
             else
               @jobexecution_dao.transition_to_failed(task.job_execution_id, task_result.message)
+              job_completed = true
               break
             end
-            job_completed = true
           ensure
             unless job_completed
               begin
