@@ -180,9 +180,9 @@ module Bricolage
       @enable_lock = enable_lock
 
       @queue = []
-      @jobnet_dao = Bricolage::DAO::JobNet.new(@ds)
-      @job_dao = Bricolage::DAO::Job.new(@ds)
-      @jobexecution_dao = Bricolage::DAO::JobExecution.new(@ds)
+      @jobnet_dao = DAO::JobNet.new(@ds)
+      @job_dao = DAO::Job.new(@ds)
+      @jobexecution_dao = DAO::JobExecution.new(@ds)
       @jobnet = nil
     end
 
@@ -215,7 +215,7 @@ module Bricolage
 
       jobnet_rec = find_or_create_jobnet(jobnet.ref)
       jobnet.sequential_jobs.each_with_index do |job_ref, index|
-        job = @job_dao.find_or_create(job_ref.subsystem, job_ref.name, jobnet_rec.id)
+        job = @job_dao.find_or_create(jobnet_rec.id, job_ref)
         job_execution = @jobexecution_dao.enqueue_job(job, index + 1)
         @queue.push Task.for_job_execution(job_execution)
       end
@@ -231,9 +231,10 @@ module Bricolage
     def consume_each
       raise "jobnet is not bound to queue" unless @jobnet
 
-      lock_jobnet(@jobnet)
+      jobnet_rec = find_or_create_jobnet(@jobnet.ref)
+      @jobnet_dao.lock(jobnet_rec.id, @executor_id) if @enable_lock
       while task = @queue.first
-        lock_job(task)
+        @job_dao.lock(task.job_id, @executor_id) if @enable_lock
         begin
           @jobexecution_dao.transition_to_running(task.job_execution_id)
 
@@ -264,11 +265,11 @@ module Bricolage
             end
           end
         ensure
-          unlock_job(task)
+          @job_dao.unlock(task.job_id, @executor_id) if @enable_lock
         end
       end
     ensure
-      unlock_jobnet(@jobnet)
+      @jobnet_dao.unlock(jobnet_rec.id, @executor_id) if @enable_lock
     end
 
     def locked?(jobnet)
@@ -277,40 +278,8 @@ module Bricolage
 
     def unlock_help(jobnet)
       jobnet_rec = find_or_create_jobnet(jobnet.ref)
-      @job_dao.where(jobnet_id: jobnet_rec.id).reject {|job| job.executor_id.nil? }
-      "update the job_id records to unlock from job tables: #{locked_jobs.map(&:id)}"
-    end
-
-    private def lock_job(task)
-      raise "Invalid job_id" if task.job_id.nil?
-      return unless @enable_lock
-
-      lock_results = @job_dao.update(where: {job_id: task.job_id, executor_id: nil},
-                                     set:   {executor_id: @executor_id})
-      if lock_results.empty?
-        raise DoubleLockError, "Already locked job: id=#{job_id}"
-      end
-    end
-
-    private def lock_jobnet(jobnet)
-      return unless @enable_lock
-
-      jobnet_rec = find_jobnet(jobnet)
-      @jobnet_dao.lock(jobnet_rec.id, @executor_id)
-    end
-
-    private def unlock_job(task)
-      return unless @enable_lock
-
-      @job_dao.update(where: {job_id: task.job_id},
-                      set:   {executor_id: nil})
-    end
-
-    private def unlock_jobnet(jobnet)
-      return unless @enable_lock
-
-      jobnet_rec = find_jobnet(jobnet)
-      @jobnet_dao.unlock(jobnet_rec.id, @executor_id)
+      locked_jobs = @job_dao.locked_jobs(jobnet_rec.id)
+      "clear executor_id of the jobnet (id: #{jobnet_rec.id}) and/or the jobs (id: #{locked_jobs.map(&:id).join(', ')})"
     end
 
     def cancel_jobnet(jobnet, message)
