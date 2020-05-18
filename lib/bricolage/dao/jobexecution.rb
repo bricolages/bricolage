@@ -235,16 +235,14 @@ module Bricolage
         EndSQL
       end
 
-      def delete_all(job_execution_ids)
+      # For tests only
+      def delete_all
         connect {|conn|
           conn.execute_update(<<~EndSQL)
-              delete from job_execution_states
-              where job_execution_id in #{job_execution_ids.join(', ')}
-              ;
-
-              delete from job_executions
-              where job_execution_id in #{job_execution_ids.join(', ')}
-              ;
+              delete from job_execution_states;
+              delete from job_executions;
+              delete from jobs;
+              delete from jobnets;
           EndSQL
         }
       end

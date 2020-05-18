@@ -289,13 +289,6 @@ module Bricolage
       @job_dao.clear_lock_all(jobnet_rec.id)
     end
 
-    # only for idempotence of test, NOT use for jobnet command
-    def reset
-      @jobexecution_dao.delete_all(@queue.map(&:job_execution_id))
-      @job_dao.delete(job_id: @jobs.map(&:id))
-      @jobnet_dao.delete(@jobnet_rec.id)
-    end
-
     class Task
       def Task.for_job_execution(exec)
         job_ref = JobNet::JobRef.new(exec.subsystem, exec.job_name, JobNet::Location.dummy)

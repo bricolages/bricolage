@@ -178,12 +178,6 @@ module Bricolage
         }
       end
 
-      def delete_all(job_ids)
-        connect {|conn|
-          conn.execute_update("delete from jobs where job_id in (#{job_ids.join(', ')})")
-        }
-      end
-
     end   # class Job
 
   end

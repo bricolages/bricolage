@@ -153,16 +153,6 @@ module Bricolage
         }
       end
 
-      def delete(jobnet_id)
-        connect {|conn|
-          conn.execute_update(<<~EndSQL)
-              delete from jobnets
-              where jobnet_id = #{jobnet_id}
-              ;
-          EndSQL
-        }
-      end
-
     end
   end
 end
