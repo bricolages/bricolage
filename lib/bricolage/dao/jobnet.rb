@@ -140,6 +140,19 @@ module Bricolage
         not records.empty?
       end
 
+      def clear_lock(jobnet_id)
+        records = connect {|conn|
+          conn.execute_update(<<~EndSQL)
+            update jobnets
+            set
+                executor_id = null
+            where
+                jobnet_id = #{jobnet_id}
+            ;
+          EndSQL
+        }
+      end
+
       def delete(jobnet_id)
         connect {|conn|
           conn.execute_update(<<~EndSQL)

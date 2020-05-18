@@ -165,6 +165,19 @@ module Bricolage
         not records.empty?
       end
 
+      def clear_lock_all(jobnet_id)
+        connect {|conn|
+          conn.execute_update(<<~EndSQL)
+            update jobs
+            set
+                executor_id = null
+            where
+                jobnet_id = #{jobnet_id}
+            ;
+          EndSQL
+        }
+      end
+
       def delete_all(job_ids)
         connect {|conn|
           conn.execute_update("delete from jobs where job_id in (#{job_ids.join(', ')})")

@@ -284,6 +284,9 @@ module Bricolage
 
     def cancel_jobnet(jobnet, message)
       @jobexecution_dao.cancel_jobnet(jobnet.ref, message)
+      jobnet_rec = find_or_create_jobnet(jobnet.ref)
+      @jobnet_dao.clear_lock(jobnet_rec.id)
+      @job_dao.clear_lock_all(jobnet_rec.id)
     end
 
     # only for idempotence of test, NOT use for jobnet command
