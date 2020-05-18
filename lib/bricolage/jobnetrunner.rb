@@ -172,7 +172,7 @@ module Bricolage
     end
 
     def execute_job(ref, queue)
-      logger.debug "job #{ref}"
+      logger.info "job #{ref}"
       job_start_time = Time.now
       job = Job.load_ref(ref, @ctx)
       job.compile

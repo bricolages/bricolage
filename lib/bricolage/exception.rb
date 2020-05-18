@@ -24,6 +24,9 @@ module Bricolage
   # Various SQL exception, except connection problem.
   class SQLException < JobFailureByException; end
 
+  # SQL unique constraint violation
+  class UniqueViolationException < SQLException; end
+
   # Database connection problems (not established, closed unexpectedly, invalid state)
   class ConnectionError < JobFailureByException; end
 
@@ -33,6 +36,10 @@ module Bricolage
   # The executing jobnet or job is already locked.
   # You should wait to unlock by another job execution or force to unlock manually.
   class DoubleLockError < JobFailure; end
+
+  # Unexpected job state transition tried.
+  # This error must be fixed by a operator.
+  class IllegalJobStateException < JobFailure; end
 
   # S3 related exceptions
   class S3Exception < JobFailureByException; end

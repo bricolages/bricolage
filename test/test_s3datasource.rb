@@ -1,6 +1,7 @@
 require 'test/unit'
 require 'mocha/test_unit'
 require 'bricolage/s3datasource'
+require 'bricolage/logger'
 require 'pp'
 require 'aws-sdk-s3'
 
