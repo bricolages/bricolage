@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 6.0.0 beta 3
+
+- [new] Upgrades pg from 0.18 to 1.2.
+
 ## version 6.0.0 beta 2
 
 - [fix] Always transmit error messages from jobs in the jobnet.
