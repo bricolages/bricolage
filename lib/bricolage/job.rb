@@ -6,6 +6,7 @@ require 'bricolage/variables'
 require 'bricolage/configloader'
 require 'bricolage/loglocator'
 require 'bricolage/exception'
+require 'tmpdir'
 require 'fileutils'
 
 module Bricolage
@@ -151,9 +152,7 @@ module Bricolage
     end
 
     def execute_in_process(log_locator:)
-      # ??? FIXME: status_path should be independent from log_path.
-      # Also, status_path should be defined regardless of log_path.
-      status_path = log_locator.path ? "#{log_locator.path}.status" : nil
+      status_path = "#{Dir.tmpdir}/bricolage.#{$$}.status.#{"%010x" % rand(1000000000000)}"
       isolate_process(status_path) {
         log_locator.redirect_stdouts {
           do_execute
