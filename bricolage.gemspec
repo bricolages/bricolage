@@ -16,12 +16,12 @@ Gem::Specification.new do |s|
   s.executables = s.files.grep(%r{bin/}).map {|path| File.basename(path) }
   s.require_path = 'lib'
 
-  s.required_ruby_version = '>= 2.0.0'
-  s.add_dependency 'pg', '~> 0.18.0'
-  s.add_dependency 'aws-sdk-s3', '~> 1'
-  s.add_dependency 'aws-sdk-sns', '~> 1'
-  s.add_development_dependency 'test-unit'
-  s.add_development_dependency 'rake'
-  s.add_development_dependency 'mocha'
-  s.add_development_dependency 'pry-byebug'
+  s.required_ruby_version = '>= 2.4.0'
+  s.add_dependency 'pg', '~> 1.2.3'
+  s.add_dependency 'aws-sdk-s3', '~> 1.64'
+  s.add_dependency 'aws-sdk-sns', '~> 1.23'
+  s.add_development_dependency 'test-unit', '~> 3.3'
+  s.add_development_dependency 'rake', '~> 13.0'
+  s.add_development_dependency 'mocha', '~> 1.11'
+  s.add_development_dependency 'pry-byebug', '~> 3.9'
 end
