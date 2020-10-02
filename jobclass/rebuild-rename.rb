@@ -21,18 +21,18 @@ JobClass.define('rebuild-rename') {
 
   script {|params, script|
     script.task(params['data-source']) {|task|
-      dest_table = '$dest_table'
-      prev_table = '${dest_table}_old'
-      work_table = '${dest_table}_wk'
+      dest_table = params['dest-table']
+      prev_table = TableSpec.parse("#{dest_table}_old")
+      work_table = TableSpec.parse("#{dest_table}_wk")
 
       task.transaction {
         # CREATE
         task.drop_force prev_table
         task.drop_force work_table
-        task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table)
+        task.exec params['table-def'].replace(/\$\{?dest_table\}?\b/, work_table.to_s)
 
         # INSERT
-        task.exec params['sql-file'].replace(/\$\{?dest_table\}?\b/, work_table)
+        task.exec params['sql-file'].replace(/\$\{?dest_table\}?\b/, work_table.to_s)
 
         # GRANT
         task.grant_if params['grant'], work_table
@@ -45,8 +45,8 @@ JobClass.define('rebuild-rename') {
       # RENAME
       task.transaction {
         task.create_dummy_table dest_table
-        task.rename_table dest_table, prev_table
-        task.rename_table work_table, dest_table
+        task.rename_table dest_table, prev_table.name
+        task.rename_table work_table, dest_table.name
       }
     }
   }
