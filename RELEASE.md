@@ -1,5 +1,23 @@
 # Bricolage Release Note
 
+## version 6.0.0 beta 4
+
+- [fix] rebuild-rename did not work with ALTER RENAME syntax error.
+
+## version 6.0.0 beta 3
+
+- [new] Upgrades pg from 0.18 to 1.2.
+
+## version 6.0.0 beta 2
+
+- [fix] Always transmit error messages from jobs in the jobnet.
+
+## version 6.0.0 beta 1
+
+- [new] Introduces database queue.  Database queue saves job states in the PostgreSQL instance, we now can run bricolage on container environment.
+- [new] Default log level is DEBUG on development environment, INFO on production environment.
+- [new] Only updating query is logged as INFO level.  Read-only queries are logged in DEBUG level.
+
 ## version 5.30.0
 
 - [new] streaming_load: new option --ctl-ds to change S3 data source for metadata files.
