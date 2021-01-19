@@ -128,6 +128,8 @@ module Bricolage
           logger.warn "Retry PG connection for execute query: #{ex.message}"
           sleep 1
           retry
+        else
+          raise
         end
       end
       if block_given?
