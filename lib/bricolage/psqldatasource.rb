@@ -131,7 +131,11 @@ module Bricolage
         end
       end
       if block_given?
-        yield conn
+        begin
+          yield conn
+        ensure
+          conn.close
+        end
       else
         return conn
       end
