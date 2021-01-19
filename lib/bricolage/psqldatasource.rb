@@ -147,23 +147,35 @@ module Bricolage
     def open_shared_connection
       raise ParameterError, 'open_shared_connection require block' unless block_given?
       conn = nil
-      if @connection_pool.empty?
-        conn = open
-      else
-        begin
-          conn = @connection_pool.shift
-          conn.execute_query('select 1'){}
-        rescue
-          conn.close
+      until conn
+        if conn_tmp = @connection_pool.shift
+          begin
+            conn_tmp.query('select 1') {}
+          rescue PG::ConnectionBad, PG::UnableToSend => ex
+            # retry
+          else
+            # no exception occured
+            conn = conn_tmp
+            conn_tmp = nil
+          ensure
+            if conn_tmp
+              conn_tmp.close
+              conn_tmp = nil
+            end
+          end
+        else
+          # Get a fresh connection instead of pooled connections.
           conn = open
         end
       end
-
-      yield conn
-    ensure
-      @connection_pool.push(conn)
+      begin
+        yield conn
+      ensure
+        @connection_pool.push(conn)
+      end
     end
 
+    # not MT-safe
     def clear_connection_pool
       @connection_pool.map(&:close)
       @connection_pool = []
