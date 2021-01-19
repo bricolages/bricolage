@@ -117,15 +117,16 @@ module Bricolage
           raise ParameterError, "could not read password: #{path}, #{user}"
     end
 
-    def open(&block)
+    def open
       retries = (ENV['BRICOLAGE_OPEN_RETRY_LIMIT'] || DEFAULT_RETRY_LIMIT).to_i
       begin
         conn = PostgresConnection.open_data_source(self)
-        conn.execute_query('select 1'){}
+        conn.execute_query('select 1') {}
       rescue PG::ConnectionBad, PG::UnableToSend => ex
+        conn.close rescue nil
         retries -= 1
         if retries >= 0
-          logger.warn "Retry PG connection for execute query: #{ex.message}"
+          logger.warn "Could not open postgres connection; retry: #{ex.message}"
           sleep 1
           retry
         else
