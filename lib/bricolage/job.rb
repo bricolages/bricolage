@@ -51,6 +51,8 @@ module Bricolage
     end
 
     attr_reader :id
+    attr_reader :job_class
+    attr_reader :context
 
     def class_id
       @job_class.id
