@@ -57,7 +57,7 @@ module Bricolage
       case
       when seconds > 60 * 60
         h, secs = seconds.divmod(60 * 60)
-        m, s = secs.divmod(60)
+        m, _sec = secs.divmod(60)
         "%d hours %d minutes" % [h, m]
       when seconds > 60
         "%d minutes %d seconds" % seconds.divmod(60)

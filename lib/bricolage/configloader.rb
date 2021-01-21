@@ -32,7 +32,7 @@ module Bricolage
     end
 
     def eruby(text, path)
-      erb = ERB.new(text, nil, '%-')
+      erb = ERB.new(text, trim_mode: '%-')
       erb.filename = path.to_s
       push_base_dir(path) {
         erb.result(binding())

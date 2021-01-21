@@ -144,7 +144,7 @@ class StreamingLoadJobClass < RubyJobClass
         @ds.open {|conn|
           execute_update conn, "delete #{log_table_wk};"
           execute_update conn, load_log_copy_stmt(log_table_wk, log_url, @src.credential_string)
-          loaded, not_loaded = partition_loaded_objects(conn, objects, log_table_wk)
+          loaded, _not_loaded = partition_loaded_objects(conn, objects, log_table_wk)
           loaded.each do |obj|
             obj.dequeue(force: true, noop: @noop)
           end

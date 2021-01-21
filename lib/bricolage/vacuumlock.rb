@@ -32,7 +32,7 @@ module Bricolage
 
     def psql_serialize_vacuum_end
       if enable_vacuum_lock?
-        path, timeout = vacuum_lock_parameters
+        path, _timeout = vacuum_lock_parameters
         "\\! rm -f #{path}"
       else
         ';'
@@ -88,7 +88,7 @@ module Bricolage
 
     def VacuumLock.cleanup_vacuum_lock
       return unless enable_vacuum_lock?
-      path, timeout = vacuum_lock_parameters
+      path, _timeout = vacuum_lock_parameters
       if locking?(path)
         $stderr.puts "remove VACUUM lock by #{Process.pid}"
         FileUtils.rm_f path

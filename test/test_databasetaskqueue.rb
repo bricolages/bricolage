@@ -13,7 +13,7 @@ module Bricolage
     job_execution_dao = DAO::JobExecution.new(datasource)
     jobnet_path = Pathname.new('test/home/subsys/net1.jobnet')
     jobnet = RootJobNet.load_auto(context, [jobnet_path])
-    jobrefs = jobnet.sequential_jobs
+    _jobrefs = jobnet.sequential_jobs
 
     jobnet_path2 = Pathname.new('test/home/subsys2/net.jobnet')
     jobnet2 = RootJobNet.load_auto(context, [jobnet_path2])

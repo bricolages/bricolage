@@ -151,7 +151,7 @@ module Bricolage
         if conn_tmp = @connection_pool.shift
           begin
             conn_tmp.query('select 1') {}
-          rescue PG::ConnectionBad, PG::UnableToSend => ex
+          rescue PG::ConnectionBad, PG::UnableToSend
             # retry
           else
             # no exception occured

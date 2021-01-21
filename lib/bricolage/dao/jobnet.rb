@@ -141,7 +141,7 @@ module Bricolage
       end
 
       def clear_lock(jobnet_id)
-        records = connect {|conn|
+        connect {|conn|
           conn.execute_update(<<~EndSQL)
             update jobnets
             set
