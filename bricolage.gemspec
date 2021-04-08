@@ -20,6 +20,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'pg', '~> 1.2.3'
   s.add_dependency 'aws-sdk-s3', '~> 1.64'
   s.add_dependency 'aws-sdk-sns', '~> 1.23'
+  s.add_dependency 'nokogiri'   # aws-sdk-core requires this
   s.add_development_dependency 'test-unit', '~> 3.3'
   s.add_development_dependency 'rake', '~> 13.0'
   s.add_development_dependency 'mocha', '~> 1.11'

@@ -50,8 +50,7 @@ module Bricolage
   class RubyDataSource < DataSource
     declare_type 'ruby'
 
-    # FIXME: keyword argument placeholder is required
-    def initialize(**)
+    def initialize
     end
 
     def new_task

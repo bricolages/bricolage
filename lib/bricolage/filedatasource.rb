@@ -6,7 +6,7 @@ module Bricolage
   class FileDataSource < DataSource
     declare_type 'file'
 
-    def initialize(opts)
+    def initialize
     end
 
     def new_task
