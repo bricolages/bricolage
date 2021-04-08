@@ -1,0 +1,9 @@
+test_db:
+  type: psql
+  host: localhost
+  port: 5432
+  database: bricolage_test
+  username: bricolage_test
+  password: bricolage_test
+  encoding: utf8
+  sql_log_level: DEBUG

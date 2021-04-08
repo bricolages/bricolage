@@ -11,6 +11,9 @@ See LICENSES file for details.
 
 ## Running Test
 
+Create bricolage_test database and user on your local machine.
+See config/test/datasource.yml for details.  Then type:
+
 % rake test
 
 ## How to use
