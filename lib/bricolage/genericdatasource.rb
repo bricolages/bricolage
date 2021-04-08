@@ -4,8 +4,7 @@ module Bricolage
   class GenericDataSource < DataSource
     declare_type 'generic'
 
-    # FIXME: keyword argument placeholder is required
-    def initialize(**)
+    def initialize
     end
 
     def new_task
