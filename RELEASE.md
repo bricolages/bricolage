@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 6.0.0 beta 5
+
+- [new] Supports Ruby 3.0.
+
 ## version 6.0.0 beta 4
 
 - [fix] rebuild-rename did not work with ALTER RENAME syntax error.
