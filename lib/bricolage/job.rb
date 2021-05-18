@@ -99,6 +99,7 @@ module Bricolage
       base_vars = Variables.union(
         #          ^ Low precedence
         @global_variables,
+        job_file_rest_vars,
         cmd_v_opt_vars,
         job_v_opt_vars
         #          v High precedence

@@ -44,8 +44,12 @@ module Bricolage
     end
 
     class DummyJobClass
+      def initialize
+        @parameters = Parameters::Declarations.new
+      end
+
       def get_parameters
-        Parameters::Declarations.new
+        @parameters
       end
 
       def invoke_parameters_filter(job)
@@ -155,6 +159,88 @@ module Bricolage
       assert_equal 'GVAR', job.variables['ref_gvar']
       assert_equal 'REST_VAR', job.variables['ref_rest_var']
       assert_equal 'JOB_OPT', job.variables['ref_job_opt']
+    end
+
+    test "job parameter can refer job file variables (direct)" do
+      job_class = DummyJobClass.new
+      job_class.get_parameters.add StringParam.new('delete-cond', 'SQL_EXPR', 'DELETE condition.')
+
+      gvars = Variables.new
+      ctx = DummyContext.new(gvars)
+
+      job_file = {
+        'delete-cond' => 'data_date >= $window_begin',
+        'window_begin' => 'current_date - 14'
+      }
+      cmd_args = []
+
+      job = Job.new('job_file_parameter', job_class, ctx)
+      job.init_global_variables
+      job.bind_parameters(job_file)
+      job.parsing_options {|h|
+        opts = OptionParser.new
+        h.define_options(opts)
+        opts.parse!(cmd_args)
+      }
+      job.compile
+
+      assert_equal 'data_date >= current_date - 14', job.params['delete-cond']
+    end
+
+    test "job parameter can refer job file variables (indirect)" do
+      job_class = DummyJobClass.new
+      job_class.get_parameters.add StringParam.new('delete-cond', 'SQL_EXPR', 'DELETE condition.')
+
+      gvars = Variables.new
+      gvars.add Variable.new('window_span', '0')
+      gvars.add Variable.new('window_begin', 'current_date - $window_span')
+      ctx = DummyContext.new(gvars)
+
+      job_file = {
+        'delete-cond' => 'data_date >= $window_begin',
+        'window_span' => '14'
+      }
+      cmd_args = []
+
+      job = Job.new('job_file_parameter', job_class, ctx)
+      job.init_global_variables
+      job.bind_parameters(job_file)
+      job.parsing_options {|h|
+        opts = OptionParser.new
+        h.define_options(opts)
+        opts.parse!(cmd_args)
+      }
+      job.compile
+
+      assert_equal 'data_date >= current_date - 14', job.params['delete-cond']
+    end
+
+    test "option value can override job file variables" do
+      job_class = DummyJobClass.new
+      job_class.get_parameters.add StringParam.new('delete-cond', 'SQL_EXPR', 'DELETE condition.')
+
+      gvars = Variables.new
+      gvars.add Variable.new('window_span', '0')
+      gvars.add Variable.new('window_begin', 'current_date - $window_span')
+      ctx = DummyContext.new(gvars)
+
+      job_file = {
+        'delete-cond' => 'data_date >= $window_begin',
+        'window_span' => '14'
+      }
+      cmd_args = ['-v', "window_begin=date '2021-01-01'"]
+
+      job = Job.new('job_file_parameter', job_class, ctx)
+      job.init_global_variables
+      job.bind_parameters(job_file)
+      job.parsing_options {|h|
+        opts = OptionParser.new
+        h.define_options(opts)
+        opts.parse!(cmd_args)
+      }
+      job.compile
+
+      assert_equal "data_date >= date '2021-01-01'", job.params['delete-cond']
     end
   end
 end
