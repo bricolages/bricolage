@@ -1,5 +1,9 @@
 # Bricolage Release Note
 
+## version 6.0.0 beta 6
+
+- [new] Now you can refer job file local variables from job parameters.
+
 ## version 6.0.0 beta 5
 
 - [new] Supports Ruby 3.0.
