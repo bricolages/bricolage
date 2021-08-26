@@ -85,7 +85,7 @@ module Bricolage
         if first_line.start_with?('#!')
           yaml_lines = []
         else
-          yaml_lines = [first_line]
+          yaml_lines = [first_line[1..-1]]
         end
         script.each_line do |line|
           break unless line.start_with?('#')
