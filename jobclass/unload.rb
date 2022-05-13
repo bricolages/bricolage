@@ -7,7 +7,7 @@ JobClass.define('unload') {
     params.add SrcTableParam.new(optional: false)
     params.add DataSourceParam.new('s3', 'dest-ds', 'Target data source (s3).')
     params.add DestFileParam.new
-    params.add EnumParam.new('format', %w(tsv csv), 'Data file format.', default: 'tsv')
+    params.add EnumParam.new('format', %w(tsv csv parquet json), 'Data file format.', default: 'tsv')
     params.add KeyValuePairsParam.new('options', 'OPTIONS', 'Loader options.',
         optional: true, default: PSQLLoadOptions.new,
         value_handler: lambda {|value, ctx, vars| PSQLLoadOptions.parse(value) })

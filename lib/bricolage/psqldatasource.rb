@@ -457,6 +457,10 @@ module Bricolage
         %q(delimiter '\t')
       when 'csv'
         %q(delimiter ',')
+      when 'parquet'
+        'format as parquet'
+      when 'json'
+        'format as json'
       else
         raise ParameterError, "unsupported format: #{fmt}"
       end
