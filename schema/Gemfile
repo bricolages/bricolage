@@ -1,5 +1,5 @@
 source 'https://rubygems.org'
 
 gem 'ridgepole'
-gem 'activerecord', '~> 6.0.5'  # activerecord 6.1 did not work with check_constraint
+gem 'activerecord', '~> 6.1.7'  # activerecord 6.1 did not work with check_constraint
 gem 'pg'
