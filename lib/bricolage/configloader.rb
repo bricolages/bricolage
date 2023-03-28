@@ -42,7 +42,11 @@ module Bricolage
     private
 
     def parse_yaml(text, path)
-      YAML.load(text)
+      if Gem::Version.new(YAML::VERSION) >= Gem::Version.new("4.0.0")
+        YAML.load(text, aliases: true)
+      else
+        YAML.load(text)
+      end
     rescue => err
       raise ParameterError, "#{path}: config file syntax error: #{err.message}"
     end
