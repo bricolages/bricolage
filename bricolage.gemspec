@@ -17,7 +17,7 @@ Gem::Specification.new do |s|
   s.require_path = 'lib'
 
   s.required_ruby_version = '>= 2.4.0'
-  s.add_dependency 'pg', '~> 1.2.3'
+  s.add_dependency 'pg', '~> 1.2', '>= 1.2.3'
   s.add_dependency 'aws-sdk-s3', '~> 1.64'
   s.add_dependency 'aws-sdk-sns', '~> 1.23'
   s.add_dependency 'nokogiri'   # aws-sdk-core requires this
