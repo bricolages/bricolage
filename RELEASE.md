@@ -1,5 +1,12 @@
 # Bricolage Release Note
 
+## version 6.0.0 beta 7
+
+- [new] Add Parquet and JSON to unload formats.
+- [new] Supports Ruby 3.1 and 3.2.
+- [fix] Update gems for security updates.
+- [fix] If a .rb.job file does not contain shebang line (#!), it wrongly fails to parse parameter block.
+
 ## version 6.0.0 beta 6
 
 - [new] Now you can refer job file local variables from job parameters.
