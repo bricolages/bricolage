@@ -105,9 +105,20 @@ module Bricolage
 
     def global_variables
       Variables.union(
+        environment_variables,
         builtin_variables,
         load_global_variables,
       )
+    end
+
+    def environment_variables
+      Variables.define {|vars|
+        ENV.each do |name, value|
+          if /\A[A-Z][A-Z0-9_]*\z/ =~ name
+            vars[name] = value
+          end
+        end
+      }
     end
 
     def builtin_variables
