@@ -42,8 +42,17 @@ module Bricolage
     private
 
     def parse_yaml(text, path)
+      # Since Ruby 3.1.0, Psych has been updated to 4.0.0.
+      # Psych 4.0.0 has incompatible changes.
+      # In Psych 4.0.0, Psych.load uses Psych.safe_load internally.
+      # Previous versions of Psych.load can also be used with Psych.unsafe_load.
+      # Psych.safe_load is a safer way to load YAML data than Psych.load.
+      # By default, Psych.safe_load only converts objects of the following classes: TrueClass, FalseClass, NilClass, Numeric, String, Array, and Hash.
+      # Psych.safe_load also does not allow the use of YAML aliases.
+      # Because of this difference between Psych.load and Psych.safe_load, YAML data that was previously loadable may no longer load.
+      # Therefore, YAML.unsafe_load is used instead of YAML.load to maintain compatibility.
       if Gem::Version.new(YAML::VERSION) >= Gem::Version.new("4.0.0")
-        YAML.load(text, aliases: true)
+        YAML.unsafe_load(text)
       else
         YAML.load(text)
       end
