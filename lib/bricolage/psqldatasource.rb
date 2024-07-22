@@ -401,6 +401,7 @@ module Bricolage
       buf.puts "copy #{dest_table}"
       buf.puts "from '#{src_ds.url(src_path)}'"
       buf.puts "credentials '#{src_ds.credential_string}'"
+      buf.puts "region '#{src_ds.region}'"
       buf.puts format_option(format, src_ds, jsonpath)
       opts.each do |opt|
         buf.puts opt.to_s
@@ -442,6 +443,7 @@ module Bricolage
       buf.puts "unload ('#{format_query(stmt.stripped_raw_content)}')"
       buf.puts "to '#{dest_ds.url(dest_path)}'"
       buf.puts "credentials '#{dest_ds.credential_string}'"
+      buf.puts "region '#{dest_ds.region}'"
       buf.puts unload_format_option(format, dest_ds)
       opts.each do |opt|
         buf.puts opt.to_s
