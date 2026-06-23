@@ -12,7 +12,7 @@ GEM
       minitest (~> 5.1)
       tzinfo (~> 1.1)
       zeitwerk (~> 2.2, >= 2.2.2)
-    concurrent-ruby (1.2.0)
+    concurrent-ruby (1.3.7)
     diffy (3.4.2)
     i18n (1.12.0)
       concurrent-ruby (~> 1.0)
